@@ -1,0 +1,17 @@
+#!/bin/bash
+
+#PBS -l walltime=48:00:00,mem=62gb,nodes=1:ppn=24
+#PBS -N PopVar_predictions_20161206
+#PBS -M neyha001@umn.edu
+#PBS -m abe
+#PBS -r n
+
+# Change the working directory
+cd /panfs/roc/groups/6/smithkp/neyhartj/Genomic_Selection/PopVarVal
+
+module load R/3.3.1
+
+
+## Run the regular simulation
+
+Rscript PopVar_predictions_MSI.R

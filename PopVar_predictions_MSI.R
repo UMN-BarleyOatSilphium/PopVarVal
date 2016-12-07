@@ -2,13 +2,13 @@
 ## population V_G, and superior progeny mean
 
 # Are we working on MSI?
-MSI = FALSE
+MSI = TRUE
 
 if (MSI) {
   geno.file <- "/panfs/roc/groups/6/smithkp/neyhartj/Genomic_Selection/Data/GBS_Genos/S2_genos_hmp.RData"
   pheno.file <- "/panfs/roc/groups/6/smithkp/neyhartj/Genomic_Selection/Data/Phenos/PopVarVal_BLUE.RData"
   
-  setwd("")
+  setwd("/panfs/roc/groups/6/smithkp/neyhartj/Genomic_Selection/PopVarVal")
   
   package.dir <- "/panfs/roc/groups/6/smithkp/neyhartj/R/x86_64-pc-linux-gnu-library/3.3/"
   
@@ -92,4 +92,4 @@ popvar_out <- mclapply(X = crossing.table.list, FUN = function(cross.table) {
 
 
 # Save the output
-save("popvar_out", file = "PopVar_predictions_20161206.RData")
+save("popvar_out", file = "Output/PopVar_predictions_20161206.RData")
