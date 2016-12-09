@@ -38,6 +38,8 @@ load(pheno.file)
 
 # Detect cores
 n.cores <- detectCores()
+# Print cores
+cat("Number of cores detected: ", n.cores)
 
 # Training and prediction line names
 tp <- names(s2_imputed_genos) %>%
@@ -86,7 +88,7 @@ popvar_out <- mclapply(X = crossing.table.list, FUN = function(cross.table) {
   pop.predict(G.in = G.in, y.in = y.in, map.in = map.in, 
               crossing.table = cross.table, tail.p = 0.1, nInd = 150, 
               min.maf = 0, mkr.cutoff = 1, entry.cutoff = 1, 
-              impute = "pass", nSim = 25, nCV.iter = 0, models = "rrBLUP")
+              impute = "pass", nSim = 10, nCV.iter = 0, models = "rrBLUP")
   
 }, mc.cores = n.cores)
 
