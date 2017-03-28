@@ -1,0 +1,21 @@
+---
+output: github_document
+---
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->  
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, eval = FALSE)
+```
+
+# PopVarVal
+
+## Description
+
+Project repository for the empirical validation of PopVar. This experiment involved predicting the genetic variance ($V_G$) and superior progeny mean ($\mu_{sp}$) of a large number of simulated bi-parental crosses. Those simulated crosses with high and low predicted $V_G$ were selected and were actually created. The families will be evaluated in field trials in 2017 and 2018.
+
+
+
+
+
+
