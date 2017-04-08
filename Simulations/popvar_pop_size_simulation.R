@@ -9,6 +9,7 @@ library(simcross)
 library(lme4)
 library(parallel)
 
+
 proj_dir <- "C:/Users/Jeff/Google Drive/Barley Lab/Projects/PopVarVal"
 
 sim_dir <- file.path(proj_dir, "Simulations")
@@ -123,9 +124,7 @@ sim_results <- mclapply(X = df_split, FUN = function(df) {
     crosses_sel <- par_combn %>% 
       sample_n(size = n_cross)
     
-    
-    # Create a RIL pedigree
-    ped <- sim_pedigree(n.ind = 5000)
+  
     
     # Iterate over the crosses and calculate the "true" genetic variance
     true_varG <- crosses_sel %>% 
@@ -136,6 +135,9 @@ sim_results <- mclapply(X = df_split, FUN = function(df) {
         pars_genos <- s2_genos_recode[c(.$par1, .$par2),]
         # Split the genos based on the map
         pars_genos <- map(genome$map, function(chr) pars_genos[,names(chr)])
+        
+        # Create a RIL pedigree
+        ped <- sim_pedigree(n.ind = 5000)
         
         # Simulate a family
         fam <- sim_family(genome = genome, pedigree = ped, founder_geno = pars_genos)
