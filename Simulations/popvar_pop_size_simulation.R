@@ -21,7 +21,7 @@ data("s2_snp_info")
 
 ## Immutable parameter 
 # Number of simulation iterations
-n_iter <- 10
+n_iter <- 50
 
 # Number of replicates in environments
 n_rep <- 2
@@ -33,7 +33,7 @@ n_env <- 4
 map_error <- 0.002
 
 # Number of bi-parental populations
-n_cross <- 10
+n_cross <- 20
 
 
 ## Mutable parameters
@@ -124,7 +124,8 @@ sim_results <- mclapply(X = df_split, FUN = function(df) {
     crosses_sel <- par_combn %>% 
       sample_n(size = n_cross)
     
-  
+    # Create a RIL pedigree
+    ped <- sim_pedigree(n.ind = 5000)
     
     # Iterate over the crosses and calculate the "true" genetic variance
     true_varG <- crosses_sel %>% 
@@ -135,9 +136,6 @@ sim_results <- mclapply(X = df_split, FUN = function(df) {
         pars_genos <- s2_genos_recode[c(.$par1, .$par2),]
         # Split the genos based on the map
         pars_genos <- map(genome$map, function(chr) pars_genos[,names(chr)])
-        
-        # Create a RIL pedigree
-        ped <- sim_pedigree(n.ind = 5000)
         
         # Simulate a family
         fam <- sim_family(genome = genome, pedigree = ped, founder_geno = pars_genos)
