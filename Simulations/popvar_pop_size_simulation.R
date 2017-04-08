@@ -1,19 +1,4 @@
----
-title: "R Notebook"
-output: html_notebook
----
-
-```{r, include = FALSE}
-knitr::opts_chunk$set(collapse = TRUE)
-```
-
-## Introduction
-
-This notebook outlines some simulations used to estimate the optimal family size for accurately predicting the superior progeny mean and variance in bi-parental populations.
-
-We will use the PopVar, rrBLUP, and qtl packages for these simulations.
-
-```{r load.packages, results='hide'}
+## PopVar Size Simulations
 
 library(tidyverse)
 library(stringr)
@@ -28,36 +13,10 @@ proj_dir <- "C:/Users/Jeff/Google Drive/Barley Lab/Projects/PopVarVal"
 
 sim_dir <- file.path(proj_dir, "Simulations")
 
-# Is this MSI?
-MSI <- TRUE
-
-```
-
-
-We will use BOPA genotype data from the two-row spring barley project.
-
-```{r load.data}
 
 data("s2_genos")
 data("s2_snp_info")
 
-```
-
-
-
-## Set Simulation Parameters
-
-Set the mutable and immutable simulation parameters. The immutable parameters include the number of environments for phenotyping, the number of iterations, and the number of phenotypic replicates. The mutable parameters include the number of QTL, the heritability, and the size of the bi-parental populations.
-
-### Assumptions
-
-We assume the following in the simulation:
-
-1. All markers and QTL are bi-allelic
-2. QTL effects follow the distribution: $a^k$, where $a = \frac{L - 1}{L + 1}$, $L$ is the number of QTL, and $k$ is in the set $k = 1, 2, ..., L$.
-3. The genetic map used in PopVar is the true genetic map.
-
-```{r set-params}
 
 ## Immutable parameter 
 # Number of simulation iterations
@@ -97,23 +56,7 @@ df_split <- split(x = param_df, f = sort(rep_len(x = seq(n_cores), length.out = 
 
 
 
-```
 
-
-## Run the Simulation
-
-The outline of the simulation will be the following:
-
-1. Define the genome and genetic architecture
-2. Phenotype the training population
-3. Select random crosses and generate a large population
-    + Use the true genotypic values to measure the "true" genetic variance
-4. Predict the $V_G$ and $\mu_{sp}$ using PopVar set to 150 individuals
-    + This will be the "predicted" genetic variance.
-5. Generate populations of various sizes, phenotype, and calculate genetic variance
-
-
-```{r def-genome}
 
 # Map length based on Munoz-Amatriain et al 2011
 map_len <- c(143.3, 172.93, 180.13, 146.5, 189.9, 142.3, 162.5)
@@ -143,23 +86,17 @@ par_combn <- as.data.frame(t(combn(x = base_pop, m = 2)))
 names(par_combn) <- c("par1", "par2")
 
 
-```
 
-
-
-The following code is looped.
-
-```{r simulate}
 
 # Iterate over sections of the data.frame
 sim_results <- mclapply(X = df_split, FUN = function(df) {
   
   # Empty list to store results
   results <- vector("list", nrow(param_df))
-
+  
   # Iterate over mutable simulation parameters
   for (p in seq(nrow(param_df))) {
-  
+    
     params <- param_df[p,]
     
     h2 <- unlist(params[1])
@@ -323,32 +260,9 @@ sim_results <- mclapply(X = df_split, FUN = function(df) {
   # Return the results
   return(results) })
 
-  
+
 # Save the output
 save("sim_results", "simulation_results.RData")
 
 
-```
 
-
-
-## Analysis
-
-We will perform pairwise correlations between:
-
-1. Predicted $V_G$, true $V_G$, and estimated $V_G$.
-2. Predicted $\mu_{sp}$, true $\mu_{sp}$, and estimated $\mu_{sp}$.
-
-```{r}
-
-# # Remove NULLs
-# results_nonull <- results[!sapply(results, is.null)]
-# 
-# # Perform pairwise correlations
-# varG_acc <- results_nonull %>% 
-#   map(mutate_at, .cols = -1:-2, .funs = funs(as.numeric(as.matrix(.)))) %>% 
-#   map(select, varG_hat, V_G_true, pred.varG) %>% 
-#   map(cor)
-
-
-```
