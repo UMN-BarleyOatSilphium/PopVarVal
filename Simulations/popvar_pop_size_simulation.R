@@ -92,10 +92,10 @@ names(par_combn) <- c("par1", "par2")
 sim_results <- mclapply(X = df_split, FUN = function(df) {
   
   # Empty list to store results
-  results <- vector("list", nrow(param_df))
+  results <- vector("list", nrow(df))
   
   # Iterate over mutable simulation parameters
-  for (p in seq(nrow(param_df))) {
+  for (p in seq(nrow(df))) {
     
     params <- param_df[p,]
     
@@ -262,7 +262,7 @@ sim_results <- mclapply(X = df_split, FUN = function(df) {
 
 
 # Save the output
-save("sim_results", "simulation_results.RData")
+save("sim_results", file = "simulation_results.RData")
 
 
 
