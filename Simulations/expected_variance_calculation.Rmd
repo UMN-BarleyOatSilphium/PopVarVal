@@ -1,0 +1,208 @@
+---
+title: "Expection of Genetic Variance in Bi-Parental Population"
+output:
+  html_document: default
+  html_notebook: default
+  pdf_document: default
+---
+
+## Introduction
+
+The expectation of genetic variance in a bi-parental population can be derived using genome-wide marker effects. This would avoid the use of simulated populations in order to determine the genetic variance.
+
+Assuming dominance and epistasis are absent, the genetic variance at a single for a recombinant inbred population is
+
+$$ V_G = 2V_A = 2 (2pqa^2) $$
+
+In a bi-parental population of RILs, the expected value of the allele frequencies $p$ is
+
+$$ E(p) = 
+\begin{cases}
+
+0.5, & \text{if parents are polymorphic} \\
+1,   & \text{if parents are monomorphic for the first allele} \\
+0,   & \text{if parents are monomorphic for the second allele}
+
+\end{cases} $$
+
+and the expected value of $q$ is $E(q) = 1 - E(p)$
+
+Consider two marker loci, $i$ and $j$. The marker effects are estimated as $a_i$ and $a_j$. According to Lynch and Walsh (1998), the genetic variance is
+
+$$ V_G = 2 V_A = 2 [ (2 p_i q_i a_i^2) + (2 p_j q_j a_j^2)  + 2 a_i a_j D_{ij} ] $$
+
+where $D_{ij}$ is the linkage disequilibrium between loci $i$ and $j$. $D_{ij}$ can be
+
+$$  \begin{align}
+
+V_G = 2 V_A &= 2 [ (2 p_i q_i a_i^2) + (2 p_j q_j a_j^2)  + 2 a_i a_j D_{ij} ] \\
+  &= 2[ (2(0.5)(0.5)1^2) + (2(0.5)(0.5)2^2) ] \\
+  &= 2[ 0.5 + 2 ] \\
+  &= 5
+
+\end{align} $$
+
+
+
+that are separated by recombination distance $r$. . One individual is homozygous for the first allele at marker $i$ and homozygous for the first allele at marker $j$. The other individual is homozygous for the second allele at marker $i$ and homozygous for the second allele at marker $j$.
+
+If the recombination rate $r$ is 0.5, the genetic variance in the bi-parental population resulting from the cross of those two individuals is
+
+$$ \begin{align}
+
+V_G = 2 V_A &= 2 [ (2p_iq_ia_i^2) + (2p_jq_ja_j^2) ] \\
+  &= 2[ (2(0.5)(0.5)1^2) + (2(0.5)(0.5)2^2) ] \\
+  &= 2[ 0.5 + 2 ] \\
+  &= 5
+
+\end{align} $$
+
+
+Let us test this using R/qtl
+
+```{r two.unlinked}
+
+library(qtl)
+
+# Create a map
+map <- sim.map(len = c(100, 100), n.mar = 3, include.x = F, eq.spacing = T)
+
+# Identify the markers
+mar_i <- "D1M2"
+mar_j <- "D2M2"
+
+# Simulate a RIL population
+model <- rbind(c(1, 50, 1, 0),
+               c(2, 50, 2, 0))
+
+# Create founders
+founders <- rbind(c(1, 1),
+                  c(-1, -1))
+
+varG <- replicate(n = 100, expr = {
+
+  pop <- sim.cross(map = map, model = model, type = "riself", n.ind = 200, error.prob = 0, missing.prob = 0,
+                   map.function = "haldane", keep.qtlgeno = T)
+  
+  # Extract qtl genotypes
+  pop_qtl_geno <- do.call("cbind", lapply(X = pop$geno, FUN = function(chr) chr$data[,2]))
+  
+  # Iterate over qtl
+  for (i in seq(ncol(pop_qtl_geno))) {
+    locus <- pop_qtl_geno[,i]
+    pop_qtl_geno[,i] <- ifelse(locus == 1, founders[1,i], founders[2,i])
+  }
+  
+  # Calculate genotypic values
+  pop_gen_val <- pop_qtl_geno %*% model[,3]
+  
+  # Return the genetic variance
+  var(pop_gen_val) })
+
+# Mean and sd
+c(mu = mean(varG))
+
+boxplot(varG)
+
+
+```
+
+The recombination rate of $r = 0.5$ means that the markers are independent, and therefore there is no covariance between the two markers. Let us say the recombination rate is $r = 0.1$, corresponding to a genetic distance of `r imf.h(0.1)` cM. The marker effects are the same.
+
+The genetic variance is thus
+
+$$ \begin{align}
+
+V_G = 2 V_A &= 2 [ (2p_iq_ia_i^2) + (2p_jq_ja_j^2) ] + 2 cov(i,j) \\
+  &= 2[ (2(0.5)(0.5)1^2) + (2(0.5)(0.5)2^2) ] + 2 cov(i,j) \\
+  &= 2[ 0.5 + 2 ] + 2 cov(i,j) \\
+  &= 5 + 2 cov(i,j)
+
+\end{align} $$
+
+
+```{r two.linked}
+
+# Desired recombination rate
+r <- 0.01
+
+# Create a map
+map <- sim.map(len = c(100, 100), n.mar = 3, include.x = F, eq.spacing = T)
+
+map$`1`["D1M2"] <- imf.h(r)
+
+# Identify the markers
+mar_i <- "D1M1"
+mar_j <- "D1M2"
+
+# Additive effects
+a_i <- 1
+a_j <- 2
+
+# Create founders
+founders <- rbind(c(1, 1),
+                  c(-1, -1))
+
+# Replicates
+nrep <- 100
+
+varG <- varG_i <- varG_j <- cov_ij <- numeric(nrep)
+
+for (n in seq(nrep)) {
+
+  pop <- sim.cross(map = map, model = model, type = "riself", n.ind = 200, error.prob = 0, missing.prob = 0,
+                   map.function = "haldane", keep.qtlgeno = T)
+  
+  # Extract qtl genotypes
+  pop_qtl_geno <- pull.geno(pop)[,c(mar_i, mar_j)]
+  
+  # Iterate over qtl
+  for (i in seq(ncol(pop_qtl_geno))) {
+    locus <- pop_qtl_geno[,i]
+    pop_qtl_geno[,i] <- ifelse(locus == 1, founders[1,i], founders[2,i])
+  }
+  
+  # Calculate genotypic values
+  pop_gen_val <- pop_qtl_geno * matrix(c(a_i, a_j), nrow = nrow(pop_qtl_geno), ncol = 2, byrow = T)
+  
+  # Return the genetic variance
+  qtl_var <- var(pop_gen_val)
+  
+  varG[n] <- var(rowSums(pop_gen_val))
+  varG_i[n] <- qtl_var[mar_i, mar_i]
+  varG_j[n] <- qtl_var[mar_j, mar_j]
+  cov_ij[n] <- qtl_var[mar_i, mar_j]
+  
+}
+
+# Mean and sd
+(out <- c(mu = mean(varG), mu_i = mean(varG_i), mu_j = mean(varG_j), mu_ij = mean(cov_ij)))
+
+# Calculate
+(out <- c(out, calc = out["mu_i"] + out["mu_j"] + (2 * out["mu_ij"])))
+
+# Determine disequilibrium
+D <- out["mu_ij"] / (a_i * a_j)
+
+P_AB <- apply(X = pop_qtl_geno, MARGIN = 1, FUN = all.equal, current = founders[1,], check.attributes = F) %>% 
+  as.logical() %>% 
+  sapply(isTRUE) %>%
+  mean()
+  
+
+
+# Predicted covariance
+cov_ij = 1 - 0.5^2
+
+
+```
+
+
+
+
+
+
+
+
+
+
