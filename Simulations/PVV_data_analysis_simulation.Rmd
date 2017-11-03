@@ -1,0 +1,58 @@
+---
+title: "PopVarVal Data Analysis Testing"
+output: html_notebook
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE)
+```
+
+## Introduction
+
+There are some fundamental questions that remain as to the analysis and interpretation of the data that will be collected from the `PopVarVal` project. Among them are:
+
+Questions:
+
+  1. How to measure accuracy of the predicted genetic variance? If we go with the correlation between the predicted and observed variance, how do we take advantage of information on the standard error of the variance estimate to inform this measure of accuracy?
+    
+Using simulations, we will see how the expected data that is collected can be used to inform the measure of accuracy.
+
+Some things to note:
+  - The data will be generate as though parents were randomly selected, however in reality the parents may have been chosen to maximize variance. We may revisit this assumption later.
+  - 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

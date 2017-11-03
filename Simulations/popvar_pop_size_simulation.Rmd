@@ -59,7 +59,7 @@ We assume the following in the simulation:
 
 ## Immutable parameter 
 # Number of simulation iterations
-n_iter <- 10
+n_iter <- 50
 
 # Number of replicates in environments
 n_rep <- 2
@@ -71,7 +71,7 @@ n_env <- 4
 map_error <- 0.002
 
 # Number of bi-parental populations
-n_cross <- 10
+n_cross <- 20
 
 
 ## Mutable parameters
@@ -339,7 +339,7 @@ We will perform pairwise correlations between:
 ```{r}
 
 # Load simulation results
-results_file <- "simulation_results.RData"
+results_file <- file.path(sim_dir, "simulation_results.RData")
 load(results_file)
 
 # Combine the split data.frame with the results list
@@ -402,3 +402,10 @@ df_results_summ %>%
 
 
 ```
+
+
+
+
+
+
+

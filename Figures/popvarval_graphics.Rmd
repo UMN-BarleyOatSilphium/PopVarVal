@@ -1,0 +1,102 @@
+---
+title: "PopVarVal Graphics"
+output: html_notebook
+---
+
+## Introduction
+
+This notebook outlines code to create graphics in the `PopVarVal` project.
+
+```{r setup}
+
+# Load packages
+library(tidyverse)
+library(readxl)
+library(stringr)
+library(neyhart)
+
+# Directories
+proj_dir <- "C:/Users/Jeff/Google Drive/Barley Lab/Projects/PopVarVal/"
+
+fig_dir <- file.path(proj_dir, "Figures")
+
+# Load information on the selected crosses and select relevant information
+cross_file <- file.path(proj_dir, "Plant_Material/PopVarVal_cross_info.xlsx")
+cross_list <- read_excel(cross_file) %>%
+  select(Parent1, Parent2, Experiment)
+
+
+```
+
+
+## Previous Simulations
+
+The following is from the first round of simulations that were used to select parent
+combinations
+
+```{r prev.sim}
+
+# Results directory
+results_dir <- file.path(proj_dir, "PopVar_Experiment_091815/Output/")
+
+# What traits to look at?
+traits <- c("DON", "dtH", "Ht", "Yld_Avg")
+
+df_list <- list()
+
+# List through the traits
+for (trait in traits) {
+  file <- list.files(results_dir, full.names = TRUE, pattern = trait)
+  load(file)
+  
+  # Convert to df
+  assign(x = "df", value = as.data.frame(data))
+  
+  # Add trait name
+  df_list[[trait]] <- df %>% 
+    mutate_all(unlist) %>% 
+    mutate(trait = trait) %>% 
+    tbl_df()
+  
+}
+
+# String replacement for traits
+trait_edit <- c("DON", "HeadingDate", "PlantHeight", "GrainYield") %>%
+  structure(names = traits)
+  
+
+# Bind the rows
+predictions_df <- df_list %>% 
+  bind_rows() %>% 
+  select(Par1, Par2, trait, names(.)) %>%
+  mutate(trait = str_replace_all(trait, trait_edit),
+         mu_sp = ifelse(trait == "GrainYield", mu.sp_high, mu.sp_low))
+
+# Combine the selected cross information from above with the predictions
+predictions_df1 <- left_join(x = predictions_df, y = cross_list, by = c("Par1" = "Parent1", "Par2" = "Parent2")) %>%
+  # Add experimental annotation
+  mutate(cross_type = ifelse(is.na(Experiment), "NotSelected", "Selected"))
+         
+
+# Plot
+g <- predictions_df1 %>%
+  ggplot(aes(mu_sp)) +
+  geom_histogram(bins = 30, fill = "#F8766D") +
+  geom_point(data = filter(predictions_df1, cross_type == "Selected"), 
+               aes(x = mu_sp, y = 10000, col = "Selected"), size = 1.5) +
+  scale_color_manual(name = "Selected Crosses", labels = "", values = "#00BFC4") +
+  facet_wrap(facets = "trait", scales = "free_x") +
+  xlab("Family Superior Progeny Mean") +
+  ylab("Number of Families") +
+  labs(
+    title = "Predicted Superior Progeny Means",
+    subtitle = "n = 388,720 possible families"
+  )
+
+save_file <- file.path(fig_dir, "pred_mu_sp_hist.jpg")
+ggsave(filename = save_file, plot = g, width = 7, height = 5)
+
+
+```
+
+
