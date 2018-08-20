@@ -349,5 +349,23 @@ calc_varG <- function(data, method = c("lmer", "sommer")) {
   data_frame(family_mean = family_mean, h2 = list(h2), sig_test = list(sig_test))
   
 }
+
+
+
+
+# A function to return a tidy output from PopVar
+tidy.popvar <- function(x) {
+  x$predictions %>% 
+    map(as_data_frame) %>% 
+    map(~mutate_all(., unlist)) %>%
+    list(., names(.)) %>%
+    pmap(.f = function(df, tr) {
+      mutate(df, trait = tr) }) %>%
+    bind_rows() %>%
+    select(trait, names(.)) %>%
+    mutate(trait = str_replace(trait, "_param.df", ""))
+}
+  
+  
     
  
