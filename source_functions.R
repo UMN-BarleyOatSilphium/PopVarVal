@@ -352,6 +352,75 @@ calc_varG <- function(data, method = c("lmer", "sommer")) {
 
 
 
+# A function to calculate family mean and superior progeny mean
+calc_mean <- function(data, i = 0.1) {
+  
+  # Check the data input
+  data <- droplevels(as.data.frame(data))
+  stopifnot(between(i, 0, 1))
+  
+  # Check column names for the required columns
+  needed_cols <- c("environment", "location", "year", "line_name", "value", "std.error", "family")
+  stopifnot(all(needed_cols %in% names(data)))
+  
+  # Convert some variables to factors
+  data1 <- mutate_at(data, vars(line_name, environment), as.factor)
+  
+  
+  # Number of lines in the family
+  n_lines <- n_distinct(data1$line_name)
+  n_env <- n_distinct(data1$environment)
+  
+  plot_table <- xtabs(~line_name + environment, data1)
+  
+  # Split based on the number of environments
+  if (n_env > 1) {
+    
+    wts <- data1$std.error^2
+
+    control <- lmerControl(check.nobs.vs.nlev = "ignore", check.nobs.vs.nRE = "ignore")
+    formula <- value ~ 1 + line_name + environment + (1|line_name:environment)
+    
+    fit <- lmer(formula = formula, data = data1, control = control, weights = wts, 
+                contrasts = list(environment = "contr.sum", line_name = "contr.sum"))
+    
+    # Get the fixed effect estimates
+    coefs <- tidy(fit) %>% 
+      filter(str_detect(term, "line_name|Intercept"), group == "fixed") %>%
+      select(term, estimate) %>%
+      add_row(term = "last_line", estimate = -sum(tail(.$estimate, -1))) %>%
+      mutate(term = c("family_mean", levels(data1$line_name)),
+             mean = c(estimate[1], estimate[-1] + estimate[1]))
+
+    
+  } else {
+    
+    formula <- value ~ 1 + line_name
+    
+    fit <- lm(formula = formula, data = data1, contrasts = list(line_name = "contr.sum"))
+    
+    # Get the fixed effect estimates
+    coefs <- tidy(fit) %>% 
+      filter(str_detect(term, "line_name|Intercept")) %>%
+      select(term, estimate) %>%
+      add_row(term = "last_line", estimate = -sum(tail(.$estimate, -1))) %>%
+      mutate(term = c("family_mean", levels(data1$line_name)),
+             mean = c(estimate[1], estimate[-1] + estimate[1]))
+    
+  }
+  
+  geno_means <- subset(coefs, term != "family_mean", mean, drop = T)
+  
+  # Calculate the superior progeny mean
+  mu_sp <- mean(geno_means[geno_means <= quantile(geno_means, i)])
+    
+  # Return all this nonsense
+  data_frame(means = list(coefs), family_mean = coefs$mean[1], mu_sp = mu_sp)
+  
+}
+
+
+
 
 # A function to return a tidy output from PopVar
 tidy.popvar <- function(x) {

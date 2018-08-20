@@ -353,7 +353,8 @@ vp_family_tomodel1 <- vp_family_tomodel1 %>%
 # Fit a model per family
 vp_family_varG1 <- vp_family_tomodel1 %>% 
   group_by(trait, family) %>%
-  do(calc_varG(data = ., method = "lmer"))
+  do(calc_varG(data = ., method = "lmer")) %>%
+  ungroup()
     
 
 ## Plot heritability for each trait/family
@@ -376,12 +377,29 @@ vp_family_varG_method1 %>%
   facet_wrap(~ trait, ncol = 2, scales = "free")
 
 
+## Calculate the superior progeny mean
+vp_family_musp <- vp_family_tomodel1 %>% 
+  group_by(trait, family) %>%
+  do(calc_mean(data = .)) %>%
+  ungroup()
+
+
+
+
 ## Calculate mean and genetic variance for FHB Severity separately for
 ## STP and CRM
 vp_family_varG1_FHB <- vp_family_tomodel1 %>% 
   filter(trait == "FHBSeverity") %>%
   group_by(location, family) %>%
-  do(calc_varG(data = ., method = "lmer"))
+  do(calc_varG(data = ., method = "lmer")) %>%
+  ungroup()
+
+## Calculate the superior progeny mean
+vp_family_FHB_musp <- vp_family_tomodel1 %>% 
+  filter(trait == "FHBSeverity") %>%
+  group_by(location, family) %>%
+  do(calc_mean(data = .)) %>%
+  ungroup()
 
 
 ## Plot heritability for each location/family
@@ -409,7 +427,8 @@ vp_family_varG_FHB_method1 %>%
 
 
 ## Save the variance calculations
-save("vp_family_varG_method1", "vp_family_varG_FHB_method1", file = file.path(result_dir, "vp_family_varG.RData"))
+save("vp_family_varG_method1", "vp_family_varG_FHB_method1", "vp_family_musp", "vp_family_FHB_musp",
+     file = file.path(result_dir, "vp_family_analysis.RData"))
 
 
 
@@ -458,15 +477,97 @@ family_MPV_mean %>%
 
 
 
+## What is the relationship between family mean and superior progeny mean?
+vp_family_estimates <- vp_family_musp %>% 
+  select(-means) %>% 
+  left_join(., select(vp_family_varG_method1, -family_mean))
+
+vp_family_estimates %>% 
+  group_by(trait) %>% 
+  summarize(mean_cor = cor(family_mean, mu_sp))
+
+# trait       mean_cor
+# 1 FHBSeverity    0.755
+# 2 HeadingDate    0.963
+# 3 PlantHeight    0.956
+
+# Plot
+g_vp_means <- vp_family_estimates %>% 
+  ggplot(aes(x = family_mean, y = mu_sp)) +
+  geom_point() +
+  facet_wrap(~trait, nrow = 1, scales = "free")
+
+ggsave(filename = "vp_mean_corr.jpg", plot = g_vp_means, path = fig_dir, height = 4, width = 8, dpi = 1000)
+
+# Relationship between variance and mu_sp
+vp_family_estimates %>% 
+  group_by(trait) %>% 
+  summarize(cor = cor(variance, mu_sp))
+
+# trait          cor
+# 1 FHBSeverity -0.629
+# 2 HeadingDate -0.599
+# 3 PlantHeight -0.190
+
+## A negative relationship is expected, since a larger variance should lead to lower mu_sp
+
+# Plot
+g_vp_musp_var <- vp_family_estimates %>% 
+  ggplot(aes(x = variance, y = mu_sp)) +
+  geom_point() +
+  facet_wrap(~trait, nrow = 1, scales = "free")
+
+ggsave(filename = "vp_musp_var_corr.jpg", plot = g_vp_means, path = fig_dir, height = 4, width = 8, dpi = 1000)
+
+
+## Relationship of mean and variance
+g_vp_mean_var <- vp_family_estimates %>% 
+  ggplot(aes(x = family_mean, y = variance)) +
+  geom_point() +
+  facet_wrap(~trait, nrow = 1, scales = "free")
+
+ggsave(filename = "vp_mean_var_corr.jpg", plot = g_vp_mean_var, path = fig_dir, height = 4, width = 8, dpi = 1000)
 
 
 
+## Model mu_sp as a contribution of family_mean and variance
+vp_musp_models <- vp_family_estimates %>%
+  group_by(trait) %>%
+  do({
+    data <- .
+    
+    # fit a linear model
+    fit <- lm(mu_sp ~ family_mean + variance, data = data)
+    # Tidy
+    fit_tidy <- tidy(fit)
+    
+    # Get the r squared
+    r_squared <- summary(fit)$r.squared
+    
+    # Fit just variance or just the family_mean
+    fit_no_var <- lm(mu_sp ~ family_mean, data = data)
+    family_mean_rsquared <- summary(fit_no_var)$r.squared
+    
+    fit_no_mean <- lm(mu_sp ~ variance, data = data)
+    var_rsquared <- summary(fit_no_mean)$r.squared
+    
+    # Return a df
+    data_frame(summary = list(fit_tidy), R2 = r_squared, R2_mean = family_mean_rsquared, R2_var = var_rsquared)
+      
+  })
+
+vp_musp_models %>%
+  unnest() %>% 
+  filter(term != "(Intercept)")
 
 
-
-
-
-
+# trait          R2 R2_mean R2_var term        estimate std.error statistic  p.value
+# 1 FHBSeverity 0.733   0.570 0.396  family_mean    0.540    0.139       3.89 2.15e- 3
+# 2 FHBSeverity 0.733   0.570 0.396  variance      -0.196    0.0724     -2.70 1.92e- 2
+# 3 HeadingDate 0.977   0.927 0.359  family_mean    0.953    0.0374     25.5  6.81e-19
+# 4 HeadingDate 0.977   0.927 0.359  variance      -0.369    0.0506     -7.29 1.56e- 7
+# 5 PlantHeight 0.944   0.915 0.0363 family_mean    0.911    0.0460     19.8  2.22e-16
+# 6 PlantHeight 0.944   0.915 0.0363 variance      -0.169    0.0471     -3.58 1.52e- 3
 
 
 

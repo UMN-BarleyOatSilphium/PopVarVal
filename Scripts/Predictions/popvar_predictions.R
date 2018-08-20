@@ -79,8 +79,7 @@ n_cores <- detectCores()
 all_par_crossing_block <- combn(x = pot_pars_geno, m = 2) %>%
   t() %>%
   as.data.frame() %>%
-  rename(parent1 = V1, parent2 = V2) %>%
-  setdiff(., crossing_block)
+  rename(parent1 = V1, parent2 = V2)
 
 
 # Add cores to the crossing block and split by core
