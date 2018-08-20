@@ -1,0 +1,557 @@
+## PopVarValidation
+## Phenotypic analysis
+##
+## This script will run statistical analyses of the phenotypic data from the PopVarVal project. This
+## will include:
+## 1. Phenotypic analysis of training population data
+## 2. Phenotypic analysis of validation family data
+## 
+
+# Load the source script
+repo_dir <- getwd()
+source(file.path(repo_dir, "source.R"))
+
+# Load the pbr library
+library(pbr)
+library(broom)
+
+
+## Load the S2 BLUEs
+load(file.path(gdrive_dir, "BarleyLab/Breeding/PhenotypicData/Final/MasterPhenotypes/S2_tidy_BLUE.RData"))
+
+# List the relevant traits
+traits <- c("HeadingDate", "FHBSeverity", "PlantHeight")
+
+
+
+### Phenotypic analysis of training population data
+
+# First gather data that would have been used to make the predictions
+tp_prediction_tomodel <- s2_tidy_BLUE %>% 
+  filter(trait %in% traits, line_name %in% tp, year %in% 2014:2015,
+         location %in% c("STP", "CRM")) %>%
+  arrange(year, location, trial, trait, line_name)
+
+# Now gather data on the training population that would be relevant to the predictions, regardless of year
+tp_relevant_tomodel <- s2_tidy_BLUE %>%
+  filter(trait %in% traits, line_name %in% tp, year %in% 2014:2017, 
+         location %in% c("STP", "CRM", "FND", "BCW"))
+
+
+## Run models
+tp_analysis <- tp_prediction_tomodel %>%
+  group_by(trait) %>%
+  do({
+    df <- .
+    print(unique(df$trait))
+    summarize_pheno(data = df)
+  })
+
+
+## Look at variance components and heritability
+(g_tp_prediction_h2 <- tp_analysis %>% 
+  mutate(h2 = map_dbl(h2, "heritability")) %>% 
+  qplot(x = trait, y = h2, geom = "col", fill = "blue", data = .) +
+  geom_text(aes(label = str_c("Envs: ", n_e)), vjust = 2) +
+  geom_text(aes(label = str_c("h2: ", round(h2, 3))), vjust = 4) + 
+  scale_fill_discrete(guide = FALSE))
+
+ggsave(filename = "tp_prediction_h2.jpg", plot = g_tp_prediction_h2, path = fig_dir, height = 5, width = 5, dpi = 1000)
+  
+
+tp_var_prop <- tp_analysis %>% 
+  mutate(varcomp = map(h2, "var_comp")) %>%
+  unnest(varcomp) %>% 
+  group_by(trait) %>% 
+  mutate(var_prop = variance / sum(variance)) 
+
+# trait       source                variance  var_prop
+# 1 FHBSeverity line_name:environment 49.2     0.825    
+# 2 FHBSeverity line_name             10.4     0.175    
+# 3 FHBSeverity Residual               0.00456 0.0000764
+# 4 HeadingDate line_name:environment  0.725   0.0665   
+# 5 HeadingDate line_name              9.20    0.844    
+# 6 HeadingDate Residual               0.972   0.0892   
+# 7 PlantHeight line_name:environment 19.5     0.642    
+# 8 PlantHeight line_name             10.9     0.358    
+# 9 PlantHeight Residual               0.00245 0.0000808
+
+g_tp_prediction_varprop <- tp_var_prop %>% 
+  ggplot(aes(x = trait, y = var_prop, fill = source)) + 
+  geom_col(position = "dodge")
+
+ggsave(filename = "tp_prediction_varprop.jpg", plot = g_tp_prediction_varprop, path = fig_dir, height = 5, width = 5, dpi = 1000)
+
+
+
+tp_analysis %>%
+  unnest(sig_test) %>%
+  mutate(annotate = case_when(p_value <= 0.01 ~ "***", p_value <= 0.05 ~ "**", p_value <= 0.1 ~ "*", TRUE ~ ""))
+
+# trait         n_e term     df statistic   p_value
+# 1 FHBSeverity     4 g         1     26.5  2.59e-  7 ***     
+# 2 FHBSeverity     4 ge        1     75.8  3.13e- 18 ***     
+# 3 HeadingDate     4 g         1    721.   8.07e-159 ***     
+# 4 HeadingDate     4 ge        1      5.87 1.54e-  2 **      
+# 5 PlantHeight     2 g         1     24.9  6.00e-  7 ***     
+# 6 PlantHeight     2 ge        1      4.67 3.07e-  2 ** 
+
+## G and GxE are significant for all traits, though more so for FHB severity.
+
+# Unnest the blues
+tp_prediction_BLUE <- tp_analysis %>%
+  unnest(BLUE) %>%
+  ungroup() %>%
+  select(-n_e)
+
+
+
+## Do the same thing for the relevant tp data
+
+## Run models
+tp_analysis <- tp_relevant_tomodel %>%
+  group_by(trait) %>%
+  do({
+    df <- .
+    print(unique(df$trait))
+    summarize_pheno(data = df)
+  })
+
+
+## Look at variance components and heritability
+tp_analysis %>% select(trait, h2, n_e) %>% mutate(h2 = map_dbl(h2, "heritability"))
+
+# trait          h2   n_e
+# 1 FHBSeverity 0.446     4
+# 2 HeadingDate 0.972    10
+# 3 PlantHeight 0.746     9
+
+(g_tp_relevant_h2 <- tp_analysis %>% 
+    mutate(h2 = map_dbl(h2, "heritability")) %>% 
+    qplot(x = trait, y = h2, geom = "col", fill = "blue", data = .) +
+    geom_text(aes(label = str_c("Envs: ", n_e)), vjust = 2) +
+    geom_text(aes(label = str_c("h2: ", round(h2, 3))), vjust = 4) + 
+    scale_fill_discrete(guide = FALSE))
+
+ggsave(filename = "tp_relevant_h2.jpg", plot = g_tp_relevant_h2, path = fig_dir, height = 5, width = 5, dpi = 1000)
+
+tp_var_prop <- tp_analysis %>% 
+  mutate(varcomp = map(h2, "var_comp")) %>%
+  unnest(varcomp) %>% 
+  group_by(trait) %>% 
+  mutate(var_prop = variance / sum(variance)) 
+
+# trait         n_e source                   variance    var_prop
+# 1 FHBSeverity     4 line_name:environment 49.2        0.825      
+# 2 FHBSeverity     4 line_name             10.4        0.175      
+# 3 FHBSeverity     4 Residual               0.00456    0.0000764  
+# 4 HeadingDate    10 line_name:environment  2.98       0.222      
+# 5 HeadingDate    10 line_name             10.4        0.778      
+# 6 HeadingDate    10 Residual               0.00000856 0.000000638
+# 7 PlantHeight     9 line_name:environment 22.2        0.752      
+# 8 PlantHeight     9 line_name              7.33       0.248      
+# 9 PlantHeight     9 Residual               0.000507   0.0000172
+
+
+g_tp_relevant_varprop <- tp_var_prop %>% 
+  ggplot(aes(x = trait, y = var_prop, fill = source)) + 
+  geom_col(position = "dodge")
+
+ggsave(filename = "tp_relevant_varprop.jpg", plot = g_tp_relevant_varprop, path = fig_dir, height = 5, width = 5, dpi = 1000)
+
+
+
+tp_analysis %>%
+  unnest(sig_test)  %>%
+  mutate(annotate = case_when(p_value <= 0.01 ~ "***", p_value <= 0.05 ~ "**", p_value <= 0.1 ~ "*", TRUE ~ ""))
+
+## G and GxE are significant for all traits, though more so for FHB severity.
+
+# trait         n_e term     df statistic   p_value annotate
+# 1 FHBSeverity     4 g         1      26.5 2.59e-  7 ***     
+# 2 FHBSeverity     4 ge        1      75.8 3.13e- 18 ***     
+# 3 HeadingDate    10 g         1    2066.  0.        ***     
+# 4 HeadingDate    10 ge        1     553.  3.27e-122 ***     
+# 5 PlantHeight     9 g         1     215.  1.30e- 48 ***     
+# 6 PlantHeight     9 ge        1     538.  5.42e-119 *** 
+
+
+
+# Unnest the blues
+tp_relevant_BLUE <- tp_analysis %>%
+  unnest(BLUE) %>%
+  ungroup() %>%
+  select(-n_e)
+
+
+
+
+
+### Phenotypic analysis of validation family data
+# Gather data
+
+vp_family_tomodel <- s2_tidy_BLUE %>%
+  filter(trait %in% traits, line_name %in% c(pot_pars, exper), str_detect(trial, "PVV"))
+
+
+## Run models
+vp_analysis <- vp_family_tomodel %>%
+  group_by(trait) %>%
+  do({
+    df <- .
+    print(unique(df$trait))
+    summarize_pheno(data = df, blue.model = "sommer")
+  })
+
+
+## Look at variance components and heritability
+vp_analysis %>% 
+  select(trait, h2, n_e) %>% 
+  mutate(h2 = map_dbl(h2, "heritability"))
+
+# trait             h2   n_e
+# 1 FHBSeverity 0.114     4
+# 2 HeadingDate 0.784     4
+# 3 PlantHeight 0.740     4
+
+# Heritability is low for FHB, but adequate for HD and PH.
+
+(g_vp_h2 <- vp_analysis %>% 
+    mutate(h2 = map_dbl(h2, "heritability")) %>% 
+    qplot(x = trait, y = h2, geom = "col", fill = "blue", data = .) +
+    geom_text(aes(label = str_c("Envs: ", n_e)), vjust = 2) +
+    geom_text(aes(label = str_c("h2: ", round(h2, 3))), vjust = 4) + 
+    scale_fill_discrete(guide = FALSE))
+
+ggsave(filename = "vp_h2.jpg", plot = g_vp_h2, path = fig_dir, height = 5, width = 5, dpi = 1000)
+
+
+vp_var_prop <- vp_analysis %>% 
+  mutate(varcomp = map(h2, "var_comp")) %>%
+  unnest(varcomp) %>% 
+  group_by(trait) %>% 
+  mutate(var_prop = variance / sum(variance)) 
+
+# trait         n_e source                 variance  var_prop
+# 1 FHBSeverity     4 line_name:environment 137.      0.959    
+# 2 FHBSeverity     4 line_name               5.83    0.0408   
+# 3 FHBSeverity     4 Residual                0.00805 0.0000562
+# 4 HeadingDate     4 line_name:environment   4.43    0.309    
+# 5 HeadingDate     4 line_name               8.38    0.584    
+# 6 HeadingDate     4 Residual                1.53    0.107    
+# 7 PlantHeight     4 line_name:environment  19.5     0.465    
+# 8 PlantHeight     4 line_name              22.5     0.535    
+# 9 PlantHeight     4 Residual                0.00377 0.0000896
+
+
+g_vp_varprop <- vp_var_prop %>% 
+  ggplot(aes(x = trait, y = var_prop, fill = source)) + 
+  geom_col(position = "dodge")
+
+ggsave(filename = "vp_varprop.jpg", plot = g_vp_varprop, path = fig_dir, height = 5, width = 5, dpi = 1000)
+
+
+vp_analysis %>%
+  unnest(sig_test)  %>%
+  mutate(annotate = case_when(p_value <= 0.01 ~ "***", p_value <= 0.05 ~ "**", p_value <= 0.1 ~ "*", TRUE ~ ""))
+
+## G and GxE are significant for all traits
+
+# trait         n_e term     df statistic   p_value annotate
+# 1 FHBSeverity     4 g         1      10.4 1.28e-  3 ***
+# 2 FHBSeverity     4 ge        1    1775.  0.        ***
+# 3 HeadingDate     4 g         1    3499.  0.        ***
+# 4 HeadingDate     4 ge        1      41.9 9.38e- 11 ***
+# 5 PlantHeight     4 g         1    1698.  0.        ***
+# 6 PlantHeight     4 ge        1     558.  2.40e-123 ***
+# 
+
+
+# Unnest the blues
+vp_BLUE <- vp_analysis %>%
+  unnest(BLUE) %>%
+  ungroup() %>%
+  select(-n_e)
+
+## For FHB severity, try estimating variance components separately by location
+vp_analysis_FHB <- vp_family_tomodel %>%
+  filter(trait == "FHBSeverity") %>%
+  group_by(location) %>%
+  do(summarize_pheno(data = ., blue.model = "sommer"))
+
+# Look at heritability
+vp_analysis_FHB %>% 
+  mutate(h2 = map_dbl(h2, "heritability")) %>%
+  select(location, n_e, h2)
+
+# location   n_e     h2
+# 1 CRM          2 0.267 
+# 2 STP          2 0.0417
+
+
+# Is GE still significant when analyzing locations independently?
+vp_analysis_FHB %>% unnest(sig_test)
+
+# location   n_e term     df statistic   p_value
+# 1 CRM          2 g         1    33.2   8.46e-  9
+# 2 CRM          2 ge        1   332.    4.26e- 74
+# 3 STP          2 g         1     0.755 3.85e-  1
+# 4 STP          2 ge        1   850.    7.16e-187
+
+## Yes
+
+
+# Extract the BLUEs
+vp_FHB_BLUE <- vp_analysis_FHB %>%
+  unnest(BLUE) %>% 
+  select(-n_e)
+
+
+## Save the BLUEs
+save("tp_prediction_BLUE", "tp_relevant_BLUE", "vp_BLUE", "vp_FHB_BLUE", file = file.path(data_dir, "PVV_BLUE.RData"))
+
+
+
+
+### Calculate genetic variance within families
+### 
+
+## First if the same line is measured in two different trials, calculate an environment mean
+vp_family_tomodel1 <- vp_family_tomodel %>%
+  filter(line_name %in% exper) %>%
+  group_by(trait, environment) %>%
+  do({
+    df <- .
+    
+    if (n_distinct(df$trial) > 1) {
+    
+      fit <- lm(value ~ -1 + line_name + trial, data = df)
+      fit_tidy <- tidy(fit) %>% filter(str_detect(term, "line_name")) %>% 
+        mutate(line_name = str_replace(term, "line_name", "")) %>% 
+        select(line_name, value = estimate, std.error)
+      
+      df %>% 
+        mutate(trial = NA) %>% 
+        distinct(trial, environment, location, year, trait) %>% 
+        cbind(., fit_tidy)
+      
+    } else {
+      
+      df
+    }
+    
+  }) %>% ungroup()
+
+## Two methods to be used:
+## 1. Calculate variance by fitting a model with G and GE
+
+## Use the stage-one BLUEs to calculate variance
+vp_family_tomodel1 <- vp_family_tomodel1 %>% 
+  mutate(family = str_extract(line_name, "4[0-9]{3}"))
+
+
+# Fit a model per family
+vp_family_varG1 <- vp_family_tomodel1 %>% 
+  group_by(trait, family) %>%
+  do(calc_varG(data = ., method = "lmer"))
+    
+
+## Plot heritability for each trait/family
+vp_family_varG1 %>% 
+  mutate(h2 = map_dbl(h2, "heritability")) %>% 
+  qplot(x = family, y = h2, data = ., fill = trait, geom = "col") + 
+  facet_grid(trait ~ .)
+
+
+# Plot mean versus varG
+vp_family_varG_method1 <- vp_family_varG1 %>% 
+  ungroup() %>%
+  mutate(varG = map(h2, "var_comp")) %>% 
+  unnest(varG) %>% 
+  filter(source == "line_name") %>% 
+  select(-source)
+
+vp_family_varG_method1 %>% 
+  qplot(x = family_mean, y = variance, data = .) + 
+  facet_wrap(~ trait, ncol = 2, scales = "free")
+
+
+## Calculate mean and genetic variance for FHB Severity separately for
+## STP and CRM
+vp_family_varG1_FHB <- vp_family_tomodel1 %>% 
+  filter(trait == "FHBSeverity") %>%
+  group_by(location, family) %>%
+  do(calc_varG(data = ., method = "lmer"))
+
+
+## Plot heritability for each location/family
+vp_family_varG1_FHB %>% 
+  mutate(h2 = map_dbl(h2, "heritability")) %>% 
+  qplot(x = family, y = h2, data = ., geom = "col") + 
+  facet_grid(location ~ .)
+
+# How many families
+n_distinct(vp_family_varG1_FHB$family)
+
+
+# Plot mean versus varG
+vp_family_varG_FHB_method1 <- vp_family_varG1_FHB %>% 
+  ungroup() %>%
+  mutate(varG = map(h2, "var_comp")) %>% 
+  unnest(varG) %>% 
+  filter(source == "line_name") %>% 
+  select(-source)
+
+vp_family_varG_FHB_method1 %>% 
+  qplot(x = family_mean, y = variance, data = .) + 
+  facet_wrap(~ location, ncol = 2, scales = "free")
+
+
+
+## Save the variance calculations
+save("vp_family_varG_method1", "vp_family_varG_FHB_method1", file = file.path(result_dir, "vp_family_varG.RData"))
+
+
+
+
+### Family analysis 
+
+## Using the pedigree information and the BLUEs, correlate the MPV with the family mean
+vp_pedigree <- entry_list %>% 
+  filter(Group == "Experimental") %>% 
+  separate(Pedigree, c("Par1", "Par2"), "/") %>%
+  distinct(Par1, Par2, Family)
+
+
+# Add the BLUEs for each parent and calculate MPV
+family_MPV <- vp_pedigree %>%
+  rename_all(str_to_lower) %>%
+  left_join(., vp_BLUE, by = c("par1" = "line_name")) %>% 
+  left_join(., vp_BLUE, by = c("par2" = "line_name", "trait")) %>% 
+  select(family, par1, par2, trait, par1_value = value.x, par2_value = value.y) %>% 
+  arrange(trait, family) %>%
+  mutate(mpv = (par1_value + par2_value) / 2,
+         family = str_c("4", family))
+
+family_MPV_mean <- family_MPV %>% 
+  left_join(., vp_family_varG_method1)
+
+# Plot
+g_mean_mpv <- family_MPV_mean %>% 
+  # filter(!(trait == "FHBSeverity" & family_mean > 22.5)) %>% # Remove outlier 
+  qplot(x = mpv, y = family_mean, data = .) + 
+  facet_wrap(~ trait, ncol = 2, scales = "free")
+
+ggsave(filename = "family_mean_mpv.jpg", plot = g_mean_mpv, path = fig_dir, height = 5, width = 5, dpi = 1000)
+
+
+# Correlate
+family_MPV_mean %>%
+  group_by(trait) %>%
+  # filter(!(trait == "FHBSeverity" & family_mean > 22.5)) %>% # Remove outlier
+  summarize(corr = cor(mpv, family_mean))
+
+# trait         corr
+# 1 FHBSeverity 0.243
+# 2 HeadingDate 0.723
+# 3 PlantHeight 0.613
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+### Appendix
+
+# ## Use the genotype BLUEs to calculate variance (i.e. already accounting for E and GE)
+# 
+# # Subset the BLUEs and assign family designators
+# vp_family_tomodel2 <- vp_BLUE %>%
+#   filter(line_name %in% exper) %>%
+#   mutate(family = str_extract(line_name, "4[0-9]{3}"))
+# 
+# # Fit a model per family
+# vp_family_varG2 <- vp_family_tomodel2 %>% 
+#   group_by(trait, family) %>%
+#   do({
+#     df <- droplevels(.)
+#     df1 <- df
+#     
+#     print(unique(df$family))
+#     print(unique(df$trait))
+#     
+#     # Number of lines in the family
+#     n_lines <- n_distinct(df1$line_name)
+#     
+#     control <- lmerControl(check.nobs.vs.nlev = "ignore", check.nobs.vs.nRE = "ignore")
+#     formula <- value ~ (1|line_name)
+#     
+#     fit <- lmer(formula = formula, data = df1, control = control)
+#     
+#     plot_table <- xtabs(~line_name, model.frame(fit))
+#     
+#     # Get the harmonic mean of the number of environments / reps
+#     n_r <- plot_table %>% 
+#       harm_mean()
+#     
+#     # Estimate heritability
+#     h2 <- herit(object = fit, exp = "line_name / (line_name + (Residual / (n_r)))", n_r = n_r)
+#     
+#     fit_null <- lm(value ~ 1, df1)
+#     lr <- -2 * as.numeric(logLik(fit_null) - logLik(fit))
+#     p_value <- pchisq(q = lr, df = 1, lower.tail = FALSE)
+#     
+#     sig_test <- data_frame(term = "family", statistic = lr, df = 1, pvalue = p_value)
+#     
+#     # The intercept of the model is the grand/family mean
+#     family_mean <- fixef(fit)[[1]]
+#     
+#     # Return
+#     data_frame(family_mean = family_mean, h2 = list(h2), sig_test = list(sig_test))
+#     
+#   })
+# 
+# 
+# ## Plot heritability for each trait/family
+# vp_family_varG2 %>% 
+#   mutate(h2 = map_dbl(h2, "heritability")) %>% 
+#   qplot(x = family, y = h2, data = ., fill = trait, geom = "col") + 
+#   facet_grid(trait ~ .)
+# 
+# 
+# # Plot mean versus varG
+# vp_family_varG_method2 <- vp_family_varG2 %>% 
+#   ungroup() %>%
+#   mutate(varG = map(h2, "var_comp")) %>% 
+#   unnest(sig_test) %>%
+#   unnest(varG) %>% 
+#   filter(source == "line_name") %>% 
+#   select(-source, -term)
+# 
+# vp_family_varG_method2 %>% 
+#   qplot(x = family_mean, y = variance, data = .) + 
+#   facet_wrap(~ trait, ncol = 2, scales = "free")
+# 

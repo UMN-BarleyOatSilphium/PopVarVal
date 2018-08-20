@@ -18,7 +18,7 @@ library(readxl)
 library(stringr)
 
 
-geno.file <- "C:/Users/Jeff/Google Drive/Barley Lab/Projects/Genomic Selection/Genotypic Data/GBS Genotype Data/S2_genos_hmp.RData"
+geno.file <- "C:/Users/Jeff/Google Drive/Barley Lab/Projects/Genomics/Genotypic_Data/GBS_Genotype_Data//S2_genos_hmp.RData"
 pheno.file <- "C:/Users/Jeff/Google Drive/Barley Lab/Projects/Genomic Selection/Phenotypic Data/Final/Master Phenotypes/PopVarVal_BLUE.RData"
 
 # Cross file
