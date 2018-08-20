@@ -7,7 +7,7 @@
 #PBS -r n
 
 # Change the working directory
-cd /panfs/roc/groups/6/smithkp/neyha001/Genomic_Selection/PopVarVal/Predictions
+cd /panfs/roc/groups/6/smithkp/neyha001/Genomic_Selection/PopVarVal/Scripts/Predictions
 
 module load R/3.5.0
 
