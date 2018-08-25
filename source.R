@@ -36,6 +36,13 @@ source(file.path(proj_dir, "source_functions.R"))
 # Load the genotypic data
 load(file.path(geno_dir, "S2_genos_mat.RData"))
 
+# Relevant traits
+traits <- c("HeadingDate", "FHBSeverity", "PlantHeight")
+
+# Create a vector of colors
+all_colors <- colorRampPalette(umn_palette(2)[3:5])
+
+
 
 # Load an entry file
 entry_list <- read_csv(file.path(data_dir, "project_entries.csv"))

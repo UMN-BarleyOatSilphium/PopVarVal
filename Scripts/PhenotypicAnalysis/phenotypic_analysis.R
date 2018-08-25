@@ -6,6 +6,9 @@
 ## 1. Phenotypic analysis of training population data
 ## 2. Phenotypic analysis of validation family data
 ## 
+## Author: Jeff Neyhart
+## Last modified: August 19, 2018
+## 
 
 # Load the source script
 repo_dir <- getwd()
@@ -14,13 +17,13 @@ source(file.path(repo_dir, "source.R"))
 # Load the pbr library
 library(pbr)
 library(broom)
+library(ggridges)
+library(cowplot)
 
 
 ## Load the S2 BLUEs
 load(file.path(gdrive_dir, "BarleyLab/Breeding/PhenotypicData/Final/MasterPhenotypes/S2_tidy_BLUE.RData"))
 
-# List the relevant traits
-traits <- c("HeadingDate", "FHBSeverity", "PlantHeight")
 
 
 
@@ -311,6 +314,82 @@ vp_FHB_BLUE <- vp_analysis_FHB %>%
 save("tp_prediction_BLUE", "tp_relevant_BLUE", "vp_BLUE", "vp_FHB_BLUE", file = file.path(data_dir, "PVV_BLUE.RData"))
 
 
+## Other plots
+
+
+# Plot the distributions of each trait and for each family
+vp_family_BLUE <- vp_BLUE %>%
+  filter(line_name %in% exper) %>%
+  mutate(family = str_extract(line_name, "4[0-9]{3}")) %>%
+  group_by(family, trait) %>%
+  mutate(family_mean_est = mean(value)) %>%
+  ungroup()
+
+
+## Calculate the mean, min, and max for all traits for the VP
+vp_family_BLUE %>% 
+  group_by(trait) %>% 
+  summarize(mean = mean(value), min = min(value), max = max(value))
+
+# trait        mean   min   max
+# 1 FHBSeverity  21.1  4.19  56.3
+# 2 HeadingDate  53.5 44.2   66.6
+# 3 PlantHeight 101.  82.2  117.
+
+
+
+
+# Combine
+vp_family_BLUE_toplot <- bind_rows(
+  mutate(vp_family_BLUE, type = "family"), 
+  mutate(vp_family_BLUE, family = "All", type = "all"))
+
+# Plot per trait
+g_vp_family_density <- vp_family_BLUE_toplot %>%
+  split(.$trait) %>%
+  map(~{
+    temp <- .
+    # Order the family based on the family mean
+    family_order <- distinct(temp, family, family_mean_est) %>% 
+      filter(family != "All") %>% 
+      arrange(family_mean_est) %>% 
+      pull(family)
+    
+    # Convert family to factor
+    temp$family <- factor(temp$family, levels = c(family_order, "All"))
+    
+    # Create a color scheme
+    family_color <- setNames(c(all_colors(n = nlevels(temp$family) - 1), "grey"), levels(temp$family))
+    
+    # Plot
+    temp %>%
+      ggplot(aes(x = value, y = type, fill = family)) +
+      geom_density_ridges(alpha = 0.2) +
+      facet_wrap(~ trait, ncol = 1, scale = "free") +
+      scale_fill_manual(values = family_color, name = "Family", guide = FALSE) +
+      theme_bw() +
+      theme(axis.title = element_blank())
+    
+  })
+
+# Cowplot
+g_density_plot <- plot_grid(plotlist = g_vp_family_density, ncol = 1, align = "hv")
+ggsave(filename = "vp_pheno_mean_density.jpg", plot = g_density_plot, path = fig_dir,
+       height = 10, width = 10, dpi = 1000)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 ### Calculate genetic variance within families
@@ -429,6 +508,10 @@ vp_family_varG_FHB_method1 %>%
 ## Save the variance calculations
 save("vp_family_varG_method1", "vp_family_varG_FHB_method1", "vp_family_musp", "vp_family_FHB_musp",
      file = file.path(result_dir, "vp_family_analysis.RData"))
+
+
+
+
 
 
 
@@ -572,9 +655,24 @@ vp_musp_models %>%
 
 
 
+## Find the number of transgressive segregants per family
+vp_and_parent_BLUE <- family_MPV %>% 
+  left_join(., vp_family_BLUE) %>% 
+  select(trait, family:par2_value, line_name, value)
 
+vp_trans_seg <- vp_and_parent_BLUE %>% 
+  group_by(trait, family) %>% 
+  mutate(min_parent = min(par1_value, par2_value)) %>% 
+  summarize(p_ts = mean(value < min_parent),
+            par1_value = unique(par1_value),
+            par2_value = unique(par2_value),
+            min_parent = unique(min_parent)) %>%
+  ungroup()
 
-
+# Add the family variance
+vp_trans_seg1 <- vp_trans_seg %>% 
+  left_join(vp_family_varG_method1) %>% 
+  select(p_ts, variance)
 
 
 

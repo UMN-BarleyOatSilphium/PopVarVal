@@ -39,7 +39,7 @@ n_cores <- detectCores()
 sim_pop_size <- 150
 n_pops <- 25
 n_iter <- 10
-n_env <- 3
+n_env <- 2
 n_rep <- 1
 n_crosses <- 50
 
@@ -89,6 +89,19 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
     tp1 <- sim_phenoval(pop = tp, h2 = h2, n.env = n_env, n.rep = n_rep)
     # Convert the phenotypes into something PopVar will handle
     pheno_use <- tp1$pheno_val$pheno_mean
+    
+    ## Select the best among the TP
+    tp_best <- select_pop(pop = tp1, intensity = 0.1, index = 1,  type = "phenotypic")
+    
+    # Randomly generate 50 crosses to simulate, then actually create
+    crossing_block <- sim_crossing_block(parents = indnames(tp_best), n.crosses = n_crosses)
+    ped <- sim_pedigree(n.ind = 40, n.selfgen = Inf)
+    
+    # Create these crosses
+    cycle1 <- sim_family_cb(genome = genome1, pedigree = ped, founder.pop = tp_best, crossing.block = crossing_block)
+    
+    # Combine the tp with cycle1
+    pv_pop <- combine_pop(pop_list = list(tp1, cycle1))
   
     ## Add error to the genetic map
     map_use <- map_sim %>% 
@@ -103,12 +116,12 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
       
     
     ## Genotype and convert for PopVar
-    geno_data <- genotype(genome = genome1, pop = tp1)
+    geno_data <- genotype(genome = genome1, pop = pv_pop)
     geno_use <- as.data.frame(cbind( c("", row.names(geno_data)), rbind(colnames(geno_data), geno_data)) )
     
-    # Randomly generate 50 crosses to simulate, then actually create
-    crossing_block <- sim_crossing_block(parents = indnames(tp1), n.crosses = n_crosses)
-    
+    # Randomly create crosses from the cycle1 individuals
+    crossing_block <- sim_crossing_block(parents = indnames(cycle1), n.crosses = n_crosses)
+
     # Pass to PopVar
     pred_out <- pop.predict(G.in = geno_use, y.in = pheno_use, map.in = map_use,
                             crossing.table = crossing_block, tail.p = 0.1, nInd = sim_pop_size,
@@ -133,7 +146,7 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
       filter(add_eff != 0)
     
     # Get the map and genotypes of only the QTL
-    qtl_geno <- pull_genotype(genome = genome1, geno = s2_cap_genos, loci = qtl_info$qtl_name) - 1
+    qtl_geno <- pull_genotype(genome = genome1, geno = pv_pop$geno, loci = qtl_info$qtl_name) - 1
     
     
     ## Calculate the expected genetic variance at each locus, assuming p = q = 0.5
@@ -192,7 +205,7 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
       exp_var_j <- sum(exp_var1) + (2 * sum(exp_covar1[upper.tri(exp_covar1)]))
       
       # The expected mu is simply the mean of the genotypic values of the two parents
-      exp_mu_j <- mean(subset(tp1$geno_val, ind %in% pars, trait1, drop = T))
+      exp_mu_j <- mean(subset(pv_pop$geno_val, ind %in% pars, trait1, drop = T))
       
       # The expected mu_sp is a function of the expected variance and the expected mean
       exp_musp_j <- exp_mu_j + (1.76 * sqrt(exp_var_j))
@@ -206,7 +219,7 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
     expected_out_df <- bind_rows(expected_out)
     
     ## Caculate the accuracy of mean, varG, and mu_sp
-    accuracy <- data_frame(
+    h2 <- data_frame(
       term = c("mean", "varG", "mu_sp"),
       accuracy = c(cor(expected_out_df$exp_mu, tidy_pred_out$pred_mu),
                    cor(expected_out_df$exp_var, tidy_pred_out$pred_varG),
