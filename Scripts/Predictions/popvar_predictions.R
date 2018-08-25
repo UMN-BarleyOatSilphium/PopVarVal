@@ -34,8 +34,8 @@ genos_use <- s2_imputed_mat[c(tp_geno, pot_pars_geno),]
 G_in <- as.data.frame(cbind( c("", row.names(genos_use)), rbind(colnames(genos_use), genos_use)) )
 
 # Format the phenos
-tp_prediction_phenos <- tp_prediction_BLUE %>% 
-# phenos_use <- tp_relevant_BLUE %>% 
+# phenos_use <- tp_prediction_BLUE %>% 
+phenos_use <- tp_relevant_BLUE %>%
   spread(trait, value) %>%
   as.data.frame()
 
@@ -52,7 +52,7 @@ map_use <- snp_info %>%
 #   column_to_rownames("family")
 # 
 # ## Predict
-# pred_out <- pop.predict(G.in = G_in, y.in = tp_prediction_phenos, map.in = map_use, 
+# pred_out <- pop.predict(G.in = G_in, y.in = phenos_use, map.in = map_use, 
 #                         crossing.table = crossing_block, tail.p = 0.1, nInd = 150,
 #                         min.maf = 0, mkr.cutoff = 1, entry.cutoff = 1, remove.dups = FALSE,
 #                         nSim = 25, nCV.iter = 1, models = "rrBLUP", impute = "pass")
