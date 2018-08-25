@@ -16,7 +16,7 @@ source(file.path(repo_dir, "source.R"))
 library(cowplot)
 
 # Load the predictions
-load(file.path(result_dir, "PVV_prediction_results.RData"))
+load(file.path(result_dir, "prediction_results_realistic.RData"))
 
 ## First subset the relevant columns
 popvar_pred <- PVV_all_pred %>%

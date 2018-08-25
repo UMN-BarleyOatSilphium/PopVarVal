@@ -22,6 +22,8 @@ fig_dir <- file.path(proj_dir, "Figures")
 data_dir <- pheno_dir <- file.path(proj_dir, "Data")
 result_dir <- file.path(proj_dir, "Results")
 
+# Create a vector of colors
+all_colors <- colorRampPalette(umn_palette(2)[3:5])
 
 
 ######
@@ -38,9 +40,6 @@ load(file.path(geno_dir, "S2_genos_mat.RData"))
 
 # Relevant traits
 traits <- c("HeadingDate", "FHBSeverity", "PlantHeight")
-
-# Create a vector of colors
-all_colors <- colorRampPalette(umn_palette(2)[3:5])
 
 
 
