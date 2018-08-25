@@ -93,7 +93,7 @@ all_par_crossing_block_split <- all_par_crossing_block %>%
 all_par_pred_out <- mclapply(X = all_par_crossing_block_split, FUN = function(core_df) {
     
     # Return predictions
-    out <- pop.predict(G.in = G_in, y.in = tp_prediction_phenos, map.in = map_use, 
+    out <- pop.predict(G.in = G_in, y.in = phenos_use, map.in = map_use, 
                 crossing.table = core_df, tail.p = 0.1, nInd = 150,
                 min.maf = 0, mkr.cutoff = 1, entry.cutoff = 1, remove.dups = FALSE,
                 nSim = 25, nCV.iter = 1, models = "rrBLUP", impute = "pass")
