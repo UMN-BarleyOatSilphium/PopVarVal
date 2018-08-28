@@ -25,6 +25,9 @@ result_dir <- file.path(proj_dir, "Results")
 # Create a vector of colors
 all_colors <- colorRampPalette(umn_palette(2)[3:5])
 
+# Create a vector to replace the parameters in graphs
+param_replace <- c("family_mean" = "mu", "variance" = "sigma[G]^2", "mu_sp" = "mu[sp]")
+
 
 ######
 # MSI Source starts here
@@ -67,4 +70,12 @@ checks <- unique(subset(entry_list, str_detect(Group, "Check"), Line_name, drop 
 
 # Extract the tp and vp from the G matrix
 s2_imputed_mat_use <- s2_imputed_mat[c(tp_geno, pot_pars_geno),]
+
+
+## Format a list of the crosses and their experiment name
+cross_list <- entry_list %>% 
+  filter(Group == "Experimental") %>% 
+  separate(Pedigree, c("parent1", "parent2"), "/") %>% 
+  rename_all(str_to_lower) %>% 
+  distinct(family, parent1, parent2, note)
 

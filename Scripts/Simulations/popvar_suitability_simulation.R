@@ -47,13 +47,18 @@ n_crosses <- 50
 h2_list <- c(0.2, 0.5, 0.8)
 nQTL_list <- c(30, 100)
 map_error_list <- c(0.01, 0.05, 0.10)
+tp_size_list <- c(150, 500)
 
 # Create a data.frame of parameters
-param_df <- crossing(h2 = h2_list, nQTL = nQTL_list, map_error = map_error_list, iter = seq(n_iter))
+param_df <- crossing(h2 = h2_list, nQTL = nQTL_list, map_error = map_error_list, tp_size = tp_size_list, iter = seq(n_iter))
 
 map_sim <- s2_snp_info %>% 
   split(.$chrom) %>% 
-  map(~setNames(.$cM_pos, .$rs))
+  map(~setNames(.$cM_pos, .$rs)) %>%
+  map(~structure(., class = "A"))  %>%
+  structure(., class = "map") %>%
+  # Jitter
+  qtl::jittermap(.)
 
 # Create the base genome - this is fixed for all simulations
 genome <- sim_genome(map = map_sim)
@@ -67,23 +72,31 @@ param_df_split <- param_df %>%
 # Parallelize
 simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
   
+  ## For local machine
+  core_df <- param_df
+  i = 1
+  ##
+  
   # Create a results list
   results_out <- vector("list", nrow(core_df))
   
   # Iterate over the rows of the param_df
   for (i in seq_along(results_out)) {
     
-    h2 <- param_df$h2[i]
-    L <- param_df$nQTL[i]
-    maxL <- max(param_df$nQTL)
-    map_error <- param_df$map_error[i]
+    h2 <- core_df$h2[i]
+    L <- core_df$nQTL[i]
+    maxL <- max(core_df$nQTL)
+    map_error <- core_df$map_error[i]
+    tp_size <- core_df$tp_size[i]
   
     # Simulate QTL
     qtl_model <- matrix(NA, ncol = 4, nrow = L)
     genome1 <- sim_gen_model(genome = genome, qtl.model = qtl_model, add.dist = "geometric", max.qtl = maxL)
     
-    # Create the TP
-    tp <- create_pop(genome = genome1, geno = s2_cap_genos, ignore.gen.model = FALSE)
+    ## Create the TP
+    # Sample from the genotypes
+    sample_genos <- s2_cap_genos[sort(sample(nrow(s2_cap_genos), size = tp_size)),]
+    tp <- create_pop(genome = genome1, geno = sample_genos, ignore.gen.model = FALSE)
     
     # Phenotype
     tp1 <- sim_phenoval(pop = tp, h2 = h2, n.env = n_env, n.rep = n_rep)
@@ -99,6 +112,10 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
     
     # Create these crosses
     cycle1 <- sim_family_cb(genome = genome1, pedigree = ped, founder.pop = tp_best, crossing.block = crossing_block)
+    
+    ## Predict the cycle1 individuals
+    cycle1_1 <- pred_geno_val(genome = genome1, training.pop = tp1, candidate.pop = cycle1)
+    
     
     # Combine the tp with cycle1
     pv_pop <- combine_pop(pop_list = list(tp1, cycle1))
@@ -117,7 +134,7 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
     
     ## Genotype and convert for PopVar
     geno_data <- genotype(genome = genome1, pop = pv_pop)
-    geno_use <- as.data.frame(cbind( c("", row.names(geno_data)), rbind(colnames(geno_data), geno_data)) )
+    geno_use <- geno_to_popvar(genome = genome1, geno = geno_data + 1)
     
     # Randomly create crosses from the cycle1 individuals
     crossing_block <- sim_crossing_block(parents = indnames(cycle1), n.crosses = n_crosses)
@@ -133,7 +150,7 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
       mutate_all(unlist) %>% 
       as_data_frame() %>%
       select(parent1 = Par1, parent2 = Par2, mpv = midPar.Pheno, pred_mu = pred.mu,
-             pred_varG = pred.varG, mu_sp = mu.sp_high)
+             pred_varG = pred.varG, pred_musp = mu.sp_high)
     
     
     
@@ -211,23 +228,27 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
       exp_musp_j <- exp_mu_j + (1.76 * sqrt(exp_var_j))
       
       # Create a df and add to the list
-      expected_out[[j]] <- crossing_block[j,] %>% mutate(exp_mu = exp_mu_j, exp_var = exp_var_j, exp_musp = exp_musp_j)
+      expected_out[[j]] <- crossing_block[j,] %>% mutate(exp_mu = exp_mu_j, exp_varG = exp_var_j, exp_musp = exp_musp_j)
       
     }
     
     
     expected_out_df <- bind_rows(expected_out)
     
-    ## Caculate the accuracy of mean, varG, and mu_sp
-    h2 <- data_frame(
-      term = c("mean", "varG", "mu_sp"),
-      accuracy = c(cor(expected_out_df$exp_mu, tidy_pred_out$pred_mu),
-                   cor(expected_out_df$exp_var, tidy_pred_out$pred_varG),
-                   cor(expected_out_df$exp_musp, tidy_pred_out$mu_sp))
-    )
+    ## Summarize the expected and predicted values
+    expected_predicted <- full_join(tidy_pred_out, expected_out_df, by = c("parent1", "parent2")) %>% 
+      gather(parameter, value, pred_mu:exp_musp) %>% 
+      separate(parameter, c("type", "parameter"), sep = "_") %>% 
+      spread(type, value)
+    
+    # Summarize
+    results_summ <- expected_predicted %>%
+      group_by(parameter) %>% 
+      summarize(accuracy = cor(exp, pred), 
+                bias = mean(pred - exp) / mean(exp))
     
     ## Add the accuracy results to the results list
-    results_out[[i]] <- list(accuracy = accuracy)
+    results_out[[i]] <- results_summ
     
   }
   

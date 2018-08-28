@@ -313,6 +313,20 @@ vp_FHB_BLUE <- vp_analysis_FHB %>%
 ## Save the BLUEs
 save("tp_prediction_BLUE", "tp_relevant_BLUE", "vp_BLUE", "vp_FHB_BLUE", file = file.path(data_dir, "PVV_BLUE.RData"))
 
+# Load
+load(file.path(data_dir, "PVV_BLUE.RData"))
+
+
+## TP mean and range
+tp_prediction_BLUE %>% 
+  group_by(trait) %>% 
+  summarize_at(vars(value), funs(min, max, mean))
+
+# trait         min   max  mean
+# 1 FHBSeverity  5.08  38.6  16.1
+# 2 HeadingDate 43.9   56.5  50.2
+# 3 PlantHeight 60.1   87.4  73.9
+
 
 ## Other plots
 
@@ -367,7 +381,7 @@ g_vp_family_density <- vp_family_BLUE_toplot %>%
       geom_density_ridges(alpha = 0.2) +
       facet_wrap(~ trait, ncol = 1, scale = "free") +
       scale_fill_manual(values = family_color, name = "Family", guide = FALSE) +
-      theme_bw() +
+      theme_acs() +
       theme(axis.title = element_blank())
     
   })
@@ -375,14 +389,7 @@ g_vp_family_density <- vp_family_BLUE_toplot %>%
 # Cowplot
 g_density_plot <- plot_grid(plotlist = g_vp_family_density, ncol = 1, align = "hv")
 ggsave(filename = "vp_pheno_mean_density.jpg", plot = g_density_plot, path = fig_dir,
-       height = 10, width = 10, dpi = 1000)
-
-
-
-
-
-
-
+       height = 7, width = 4, dpi = 1000)
 
 
 
@@ -510,13 +517,21 @@ save("vp_family_varG_method1", "vp_family_varG_FHB_method1", "vp_family_musp", "
      file = file.path(result_dir, "vp_family_analysis.RData"))
 
 
-
+load(file.path(result_dir, "vp_family_analysis.RData"))
 
 
 
 
 
 ### Family analysis 
+
+## What is the coefficient of variation for the mean and variance for each trait
+vp_family_varG_method1 %>% 
+  gather(parameter, estimate, family_mean, variance) %>% 
+  group_by(trait, parameter) %>% 
+  summarize(cv = sd(estimate) / mean(estimate))
+
+
 
 ## Using the pedigree information and the BLUEs, correlate the MPV with the family mean
 vp_pedigree <- entry_list %>% 
@@ -564,6 +579,25 @@ family_MPV_mean %>%
 vp_family_estimates <- vp_family_musp %>% 
   select(-means) %>% 
   left_join(., select(vp_family_varG_method1, -family_mean))
+
+# Mean and range of means and variances
+vp_family_estimates %>% 
+  gather(parameter, estimate, family_mean:variance) %>% 
+  group_by(trait, parameter) %>% 
+  summarize_at(vars(estimate), funs(min, max, mean))
+
+# trait       parameter        min   max  mean
+# 1 FHBSeverity family_mean 2.14e+ 1 30.8  25.1 
+# 2 FHBSeverity mu_sp       1.06e+ 1 19.4  14.8 
+# 3 FHBSeverity variance    4.87e-14 15.4   4.95
+# 4 HeadingDate family_mean 4.79e+ 1 55.8  52.5 
+# 5 HeadingDate mu_sp       4.38e+ 1 53.4  49.5 
+# 6 HeadingDate variance    4.33e- 1  8.57  2.27
+# 7 PlantHeight family_mean 7.30e+ 1 90.8  81.8 
+# 8 PlantHeight mu_sp       6.79e+ 1 84.0  75.3 
+# 9 PlantHeight variance    0.       18.4   6.37
+
+
 
 vp_family_estimates %>% 
   group_by(trait) %>% 
