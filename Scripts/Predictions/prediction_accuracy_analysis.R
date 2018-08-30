@@ -11,6 +11,9 @@
 repo_dir <- getwd()
 source(file.path(repo_dir, "source.R"))
 
+# Boot reps
+boot_reps <- 1000
+alpha <- 0.05
 
 ## Load the predictions and the results
 # Predictions
@@ -41,9 +44,11 @@ popvar_pred_cross <- popvar_pred %>%
   reduce(left_join) %>%
   gather(tp_set, prediction, realistic, relevant)
 
-# Combine and tidy the empirical results
-vp_family_results <- left_join(x = select(vp_family_musp, -means), y = select(vp_family_varG_method1, -family_mean)) %>%
-  gather(parameter, estimate, family_mean:variance)
+## Edit the bootstrapping results
+vp_family_results <- vp_family_boot %>% 
+  mutate(parameter = case_when(parameter == "mu" ~ "family_mean", parameter == "varG" ~ "variance", TRUE ~ "mu_sp"),
+         expectation = base + bias) %>%
+  select(trait, family, parameter, estimate = base, expectation)
 
 # Combine the predictions with the estimates - remove NAs
 popvar_pred_obs <- left_join(popvar_pred_cross, vp_family_results) %>%
@@ -59,22 +64,19 @@ popvar_pred_obs <- left_join(popvar_pred_cross, vp_family_results) %>%
 set.seed(242)
 pred_acc <- popvar_pred_obs %>% 
   group_by(trait, parameter, tp_set) %>% 
-  do(bootstrap(x = .$prediction, y = .$estimate, fun = "cor", boot.reps = 10000, alpha = c(0.01, 0.05, 0.10))) %>%
-  ungroup() %>%
-  mutate(alpha = rep(c(0.01, 0.05, 0.10), length.out = nrow(.))) %>%
+  do(bootstrap(x = .$prediction, y = .$estimate, fun = "cor", boot.reps = boot_reps, alpha = alpha)) %>%
   rowwise() %>%
-  mutate(annotation = case_when(
-    !between(0, ci_lower, ci_upper) & alpha == 0.01 ~ "***",
-    !between(0, ci_lower, ci_upper) & alpha == 0.05 ~ "**",
-    !between(0, ci_lower, ci_upper) & alpha == 0.1 ~ "*",
-    TRUE ~ "")) %>%
+  mutate(annotation = ifelse(!between(0, ci_lower, ci_upper), "*", "")) %>%
   ungroup()
 
-# Select the most significant results
-pred_acc_sig <- pred_acc %>% 
-  group_by(trait, parameter, tp_set) %>% 
-  filter(annotation != "" | alpha == max(alpha)) %>%
-  slice(1)
+# ## Do predictions of the variance improve when using the unbiased expectation?
+# pred_acc_exp <- popvar_pred_obs %>%
+#   group_by(trait, parameter, tp_set) %>%
+#   do(bootstrap(x = .$prediction, y = .$expectation, fun = "cor", boot.reps = boot_reps, alpha = alpha)) %>%
+#   rowwise() %>%
+#   mutate(annotation = ifelse(!between(0, ci_lower, ci_upper), "*", "")) %>%
+#   ungroup()
+
 
 # trait       parameter   tp_set    statistic  base     se     bias ci_lower ci_upper alpha annotation
 # 1 FHBSeverity family_mean realistic cor       0.504   0.196   0.0126    0.110     0.862  0.05 **        
@@ -103,12 +105,26 @@ g_pred_acc <- popvar_pred_obs %>%
   map(~ggplot(., aes(x = prediction, y = estimate)) +
         geom_smooth(method = "lm", se = FALSE) + 
         geom_point() + 
-        geom_text(data = mutate(subset(pred_acc_sig, tp_set == unique(.$tp_set)), annotation = str_c("r = ", round(base, 2), annotation)),
+        geom_text(data = mutate(subset(pred_acc, tp_set == unique(.$tp_set)), annotation = str_c("r = ", round(base, 2), annotation)),
                   aes(x = Inf, y = -Inf, label = annotation), size = 3, hjust = 1.2, vjust = -1) + 
         ylab("Observation") +
         xlab("Prediction") + 
         facet_wrap(~ trait + parameter, ncol = 3, scales = "free") + 
         theme_acs() )
+
+# ## Plot for the expectation
+# g_pred_acc_exp <- popvar_pred_obs %>%
+#   split(.$tp_set) %>%
+#   map(~ggplot(., aes(x = prediction, y = expectation)) +
+#         geom_smooth(method = "lm", se = FALSE) + 
+#         geom_point() + 
+#         geom_text(data = mutate(subset(pred_acc_exp, tp_set == unique(.$tp_set)), annotation = str_c("r = ", round(base, 2), annotation)),
+#                   aes(x = Inf, y = -Inf, label = annotation), size = 3, hjust = 1.2, vjust = -1) + 
+#         ylab("Observation") +
+#         xlab("Prediction") + 
+#         facet_wrap(~ trait + parameter, ncol = 3, scales = "free") + 
+#         theme_acs() )
+
 
 # Save the plots
 for (i in seq_along(g_pred_acc)) {
@@ -121,21 +137,10 @@ for (i in seq_along(g_pred_acc)) {
 pred_acc_filt <- popvar_pred_obs %>% 
   filter(!(trait == "HeadingDate" & parameter == "variance" & (estimate > 4 | prediction > 0.8))) %>%
   group_by(trait, parameter, tp_set) %>% 
-  do(bootstrap(x = .$prediction, y = .$estimate, fun = "cor", boot.reps = 10000, alpha = c(0.01, 0.05, 0.10))) %>%
-  ungroup() %>%
-  mutate(alpha = rep(c(0.01, 0.05, 0.10), length.out = nrow(.))) %>%
+  do(bootstrap(x = .$prediction, y = .$estimate, fun = "cor", boot.reps = boot_reps, alpha = alpha)) %>%
   rowwise() %>%
-  mutate(annotation = case_when(
-    !between(0, ci_lower, ci_upper) & alpha == 0.01 ~ "***",
-    !between(0, ci_lower, ci_upper) & alpha == 0.05 ~ "**",
-    !between(0, ci_lower, ci_upper) & alpha == 0.1 ~ "*",
-    TRUE ~ "")) %>%
+  mutate(annotation = ifelse(!between(0, ci_lower, ci_upper), "*", "")) %>%
   ungroup()
-
-pred_acc_filt_sig <- pred_acc_filt %>% 
-  group_by(trait, parameter, tp_set) %>% 
-  filter(annotation != "" | alpha == max(alpha)) %>%
-  slice(1)
 
 # Plot the same results
 g_pred_acc_filt <- popvar_pred_obs %>%
@@ -144,7 +149,7 @@ g_pred_acc_filt <- popvar_pred_obs %>%
   map(~ggplot(., aes(x = prediction, y = estimate)) +
         geom_smooth(method = "lm", se = FALSE) + 
         geom_point() + 
-        geom_text(data = mutate(subset(pred_acc_filt_sig, tp_set == unique(.$tp_set)), annotation = str_c("r = ", round(base, 2), annotation)),
+        geom_text(data = mutate(subset(pred_acc_filt, tp_set == unique(.$tp_set)), annotation = str_c("r = ", round(base, 2), annotation)),
                   aes(x = Inf, y = -Inf, label = annotation), size = 3, hjust = 1.2, vjust = -1) + 
         ylab("Observation") +
         xlab("Prediction") + 
@@ -164,7 +169,49 @@ pred_acc %>%
   group_by(trait, parameter) %>% 
   mutate(different = !between(base[1], ci_lower[2], ci_upper[2]))
 
+# No
 
+
+
+
+
+
+
+## Analyze bias
+# First calculate bias on a per-family basis
+popvar_bias <- popvar_pred_obs %>% 
+  mutate(bias = (prediction - estimate) / estimate) %>%
+  filter(tp_set == "realistic") %>%
+  # Filter out extremely large bias (i.e. very small estimate) %>%
+  filter(estimate > 1e-5) %>%
+  select(family, trait, parameter, prediction:bias)
+
+# Next summarize over traits
+popvar_trait_bias <- popvar_bias %>% 
+  group_by(trait, parameter) %>% 
+  summarize(bias = mean(prediction - estimate) / mean(estimate))
+
+# Plot
+popvar_bias %>%
+  ggplot(aes(x = family, y = bias, color = parameter)) + 
+  geom_point() + 
+  facet_wrap(~ trait + parameter, scales = "free")
+
+# Plot bias versus heritability
+popvar_bias %>% 
+  left_join(., select(vp_family_varG_method1, trait, family, heritability)) %>% 
+  ggplot(aes(x = heritability, y = abs(bias))) + 
+  geom_point() + 
+  facet_wrap(~ trait + parameter, scales = "free")
+
+## View the summary over traits
+popvar_trait_bias %>% 
+  spread(parameter, bias)
+
+# trait       family_mean    mu_sp variance
+# 1 FHBSeverity     -0.371  -0.00395   -0.945
+# 2 HeadingDate     -0.0453 -0.00751   -0.834
+# 3 PlantHeight     -0.102  -0.0356    -0.963
 
 
 

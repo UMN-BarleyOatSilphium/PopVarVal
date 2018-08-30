@@ -5,7 +5,7 @@
 ## might explain the success or failure of PopVar
 ## 
 ## Author: Jeff Neyhart
-## Last modified: August 20, 2018
+## Last modified: August 30, 2018
 ## 
 
 # Run the source script
@@ -72,10 +72,10 @@ param_df_split <- param_df %>%
 # Parallelize
 simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
   
-  ## For local machine
-  core_df <- param_df
-  i = 1
-  ##
+  # ## For local machine
+  # core_df <- param_df
+  # i = 1
+  # ##
   
   # Create a results list
   results_out <- vector("list", nrow(core_df))
@@ -85,7 +85,7 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
     
     h2 <- core_df$h2[i]
     L <- core_df$nQTL[i]
-    maxL <- max(core_df$nQTL)
+    maxL <- max(param_df$nQTL)
     map_error <- core_df$map_error[i]
     tp_size <- core_df$tp_size[i]
   
@@ -97,48 +97,20 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
     # Sample from the genotypes
     sample_genos <- s2_cap_genos[sort(sample(nrow(s2_cap_genos), size = tp_size)),]
     tp <- create_pop(genome = genome1, geno = sample_genos, ignore.gen.model = FALSE)
+    # Genotype
+    tp_geno <- genotype(genome = genome1, pop = tp)
     
     # Phenotype
     tp1 <- sim_phenoval(pop = tp, h2 = h2, n.env = n_env, n.rep = n_rep)
     # Convert the phenotypes into something PopVar will handle
     pheno_use <- tp1$pheno_val$pheno_mean
+    # Convert genotypes into something useable for PopVar
+    geno_use <- as.data.frame(cbind( c("", row.names(tp_geno)), rbind(colnames(tp_geno), tp_geno)) )
     
-    ## Select the best among the TP
-    tp_best <- select_pop(pop = tp1, intensity = 0.1, index = 1,  type = "phenotypic")
-    
-    # Randomly generate 50 crosses to simulate, then actually create
-    crossing_block <- sim_crossing_block(parents = indnames(tp_best), n.crosses = n_crosses)
-    ped <- sim_pedigree(n.ind = 40, n.selfgen = Inf)
-    
-    # Create these crosses
-    cycle1 <- sim_family_cb(genome = genome1, pedigree = ped, founder.pop = tp_best, crossing.block = crossing_block)
-    
-    ## Predict the cycle1 individuals
-    cycle1_1 <- pred_geno_val(genome = genome1, training.pop = tp1, candidate.pop = cycle1)
+    # Randomly create crosses from the TP individuals
+    crossing_block <- sim_crossing_block(parents = indnames(tp1), n.crosses = n_crosses)
     
     
-    # Combine the tp with cycle1
-    pv_pop <- combine_pop(pop_list = list(tp1, cycle1))
-  
-    ## Add error to the genetic map
-    map_use <- map_sim %>% 
-      # Remove the QTL
-      map(~.[names(.) %in% markernames(genome1, include.qtl = FALSE)]) %>%
-      map(~. + rnorm(n = length(.), mean = 0, sd = sqrt(map_error))) %>% 
-      map(sort) %>%
-      map(~data_frame(marker = names(.), pos = .)) %>% 
-      map2_df(.x = ., .y = names(.), ~mutate(.x, chrom = .y)) %>%
-      select(marker, chrom, pos) %>%
-      as.data.frame()
-      
-    
-    ## Genotype and convert for PopVar
-    geno_data <- genotype(genome = genome1, pop = pv_pop)
-    geno_use <- geno_to_popvar(genome = genome1, geno = geno_data + 1)
-    
-    # Randomly create crosses from the cycle1 individuals
-    crossing_block <- sim_crossing_block(parents = indnames(cycle1), n.crosses = n_crosses)
-
     # Pass to PopVar
     pred_out <- pop.predict(G.in = geno_use, y.in = pheno_use, map.in = map_use,
                             crossing.table = crossing_block, tail.p = 0.1, nInd = sim_pop_size,
@@ -156,87 +128,13 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
     
     
     ## Calculate the expected genetic variance in these populations
+    expected_var <- calc_exp_genvar(genome = genome1, pedigree = ped, founder.pop = pv_pop, crossing.block = crossing_block) %>%
+      rename(exp_varG = exp_var) %>%
+      mutate(exp_musp = exp_mu + (1.76 * sqrt(exp_varG)))
     
-    # Get the QTL information
-    qtl_info <- pull_qtl(genome1) %>%
-      # Pull only effective QTL
-      filter(add_eff != 0)
-    
-    # Get the map and genotypes of only the QTL
-    qtl_geno <- pull_genotype(genome = genome1, geno = pv_pop$geno, loci = qtl_info$qtl_name) - 1
-    
-    
-    ## Calculate the expected genetic variance at each locus, assuming p = q = 0.5
-    qtl_info1 <- qtl_info %>% 
-      mutate(exp_var = add_eff^2) %>%
-      split(.$chr)
-    
-    
-    ## Second calculate the expected covariance between QTL
-    # Create a distance matrix
-    qtl_dist <- qtl_info1 %>% 
-      map(~{
-        temp <- .
-        as.matrix(dist(temp$pos)) %>% 
-          `dimnames<-`(., list(temp$qtl_name, temp$qtl_name))
-      })
-    
-    # Calculate pairwise D
-    pairwise_D <- qtl_dist %>%
-      map(~qtl::mf.h(.)) %>%
-      map(~((1 - (2 * .)) / (1 + (2 * .))) )
-    
-    # Calculate the pairwise product of all marker effects
-    pairwise_prod <- qtl_info1 %>%
-      map(~{
-        temp <- .
-        crossprod(t(temp$add_eff)) %>% `dimnames<-`(., list(temp$qtl_name, temp$qtl_name))
-      })
-    
-    # The covariance is the QTL effect product multiplied by the expected D
-    exp_covar <- map2(pairwise_prod, pairwise_D, `*`) %>% 
-      Matrix::.bdiag() %>%
-      as.matrix() %>%
-      `dimnames<-`(., list(qtl_info$qtl_name, qtl_info$qtl_name))
-    exp_var <- qtl_info1 %>% 
-      bind_rows() %>% 
-      column_to_rownames("qtl_name") %>% 
-      select(exp_var) %>% 
-      as.matrix()
-    
-    # List of expected variance, mean, etc
-    expected_out <- vector("list", nrow(crossing_block))
-    
-    # Iterate over the crossing block
-    for (j in seq(nrow(crossing_block))) {
-      
-      pars <- as.character(crossing_block[j,])
-      
-      # Get the QTL genotypes and find those that are polymorphic
-      poly_qtl <- colMeans(qtl_geno[pars,]) %>% {.[.==0]} %>% names()
-      exp_var1 <- exp_var[poly_qtl,,drop = F]
-      exp_covar1 <- exp_covar[poly_qtl, poly_qtl]
-      
-      # The expected variance is the sum of the variances at the polymorphic QTL, plus 2 times
-      # the expected covariance between all polymorphic QTL
-      exp_var_j <- sum(exp_var1) + (2 * sum(exp_covar1[upper.tri(exp_covar1)]))
-      
-      # The expected mu is simply the mean of the genotypic values of the two parents
-      exp_mu_j <- mean(subset(pv_pop$geno_val, ind %in% pars, trait1, drop = T))
-      
-      # The expected mu_sp is a function of the expected variance and the expected mean
-      exp_musp_j <- exp_mu_j + (1.76 * sqrt(exp_var_j))
-      
-      # Create a df and add to the list
-      expected_out[[j]] <- crossing_block[j,] %>% mutate(exp_mu = exp_mu_j, exp_varG = exp_var_j, exp_musp = exp_musp_j)
-      
-    }
-    
-    
-    expected_out_df <- bind_rows(expected_out)
     
     ## Summarize the expected and predicted values
-    expected_predicted <- full_join(tidy_pred_out, expected_out_df, by = c("parent1", "parent2")) %>% 
+    expected_predicted <- full_join(tidy_pred_out, expected_var, by = c("parent1", "parent2")) %>% 
       gather(parameter, value, pred_mu:exp_musp) %>% 
       separate(parameter, c("type", "parameter"), sep = "_") %>% 
       spread(type, value)
@@ -244,8 +142,9 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
     # Summarize
     results_summ <- expected_predicted %>%
       group_by(parameter) %>% 
-      summarize(accuracy = cor(exp, pred), 
-                bias = mean(pred - exp) / mean(exp))
+      nest(exp, pred) %>%
+      mutate(accuracy = map_dbl(data, ~cor(.$exp, .$pred)),
+             bias = map_dbl(data, ~mean(.$pred - .$exp) / mean(.$exp)))
     
     ## Add the accuracy results to the results list
     results_out[[i]] <- results_summ

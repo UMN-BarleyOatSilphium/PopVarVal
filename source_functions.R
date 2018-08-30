@@ -346,7 +346,7 @@ calc_varG <- function(data, method = c("lmer", "sommer")) {
   }
   
   # Return all this nonsense
-  data_frame(family_mean = family_mean, h2 = list(h2), sig_test = list(sig_test))
+  data_frame(family_mean = family_mean, fit = list(fit), h2 = list(h2), sig_test = list(sig_test))
   
 }
 
