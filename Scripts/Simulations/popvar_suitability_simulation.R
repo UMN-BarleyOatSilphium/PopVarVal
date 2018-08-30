@@ -107,6 +107,17 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
     # Convert genotypes into something useable for PopVar
     geno_use <- as.data.frame(cbind( c("", row.names(tp_geno)), rbind(colnames(tp_geno), tp_geno)) )
     
+    ## Add error to the genetic map
+    map_use <- map_sim %>% 
+      # Remove the QTL
+      map(~.[names(.) %in% markernames(genome1, include.qtl = FALSE)]) %>%
+      map(~. + rnorm(n = length(.), mean = 0, sd = sqrt(map_error))) %>% 
+      map(sort) %>%
+      map(~data_frame(marker = names(.), pos = .)) %>% 
+      map2_df(.x = ., .y = names(.), ~mutate(.x, chrom = .y)) %>%
+      select(marker, chrom, pos) %>%
+      as.data.frame()
+    
     # Randomly create crosses from the TP individuals
     crossing_block <- sim_crossing_block(parents = indnames(tp1), n.crosses = n_crosses)
     
