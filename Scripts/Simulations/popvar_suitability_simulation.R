@@ -38,7 +38,7 @@ n_cores <- detectCores()
 ## Fixed parameters
 sim_pop_size <- 150
 n_pops <- 25
-n_iter <- 10
+n_iter <- 25
 n_env <- 2
 n_rep <- 1
 n_crosses <- 50
@@ -46,8 +46,8 @@ n_crosses <- 50
 ## Outline the parameters to perturb
 h2_list <- c(0.2, 0.5, 0.8)
 nQTL_list <- c(30, 100)
-map_error_list <- c(0.01, 0.05, 0.10)
-tp_size_list <- c(150, 500)
+map_error_list <- c(0.01, 0.10, 1, 10)
+tp_size_list <- seq(150, 600, by = 150)
 
 # Create a data.frame of parameters
 param_df <- crossing(h2 = h2_list, nQTL = nQTL_list, map_error = map_error_list, tp_size = tp_size_list, iter = seq(n_iter))
@@ -106,17 +106,7 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
     pheno_use <- tp1$pheno_val$pheno_mean
     # Convert genotypes into something useable for PopVar
     geno_use <- as.data.frame(cbind( c("", row.names(tp_geno)), rbind(colnames(tp_geno), tp_geno)) )
-    
-    ## Add error to the genetic map
-    map_use <- map_sim %>% 
-      # Remove the QTL
-      map(~.[names(.) %in% markernames(genome1, include.qtl = FALSE)]) %>%
-      map(~. + rnorm(n = length(.), mean = 0, sd = sqrt(map_error))) %>% 
-      map(sort) %>%
-      map(~data_frame(marker = names(.), pos = .)) %>% 
-      map2_df(.x = ., .y = names(.), ~mutate(.x, chrom = .y)) %>%
-      select(marker, chrom, pos) %>%
-      as.data.frame()
+  
     
     # Randomly create crosses from the TP individuals
     crossing_block <- sim_crossing_block(parents = indnames(tp1), n.crosses = n_crosses)
@@ -155,6 +145,11 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
     
     # Add to the genome
     genome2$gen_model <- list(marker_qtl_model)
+    # Add the map to the genome
+    genome2$map <- genome2$map %>%
+      # Remove the QTL
+      map(~. + rnorm(n = length(.), mean = 0, sd = sqrt(map_error))) %>% 
+      map(sort)
     
     
     # Use the genetic variance prediction function
