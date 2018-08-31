@@ -332,7 +332,7 @@ vp_family_estimates <- vp_family_musp %>%
 
 # Mean and range of means and variances
 vp_family_estimates %>% 
-  gather(parameter, estimate, family_mean:variance) %>% 
+  gather(parameter, estimate, family_mean, mu_sp, variance) %>% 
   group_by(trait, parameter) %>% 
   summarize_at(vars(estimate), funs(min, max, mean))
 
@@ -343,6 +343,19 @@ vp_family_estimates %>%
 # 8 HeadingDate variance     4.33e- 1  8.57   2.27 
 # 9 PlantHeight family_mean  7.30e+ 1 90.8   81.8  
 # 12 PlantHeight variance     0.       18.4    6.37
+
+## Ratio of mean to variance
+vp_family_estimates %>% 
+  group_by(trait) %>% 
+  summarize_at(vars(family_mean, mu_sp, variance), funs(var)) %>% 
+  mutate(t = variance / family_mean)
+
+## t is the ratio of variance of variance to variance of mean
+
+# trait       family_mean mu_sp variance     t
+# 1 FHBSeverity        8.37  6.48    30.9  3.69 
+# 2 HeadingDate        5.99  7.32     3.27 0.545
+# 3 PlantHeight       24.8  22.7     23.7  0.954
 
 
 

@@ -73,8 +73,8 @@ param_df_split <- param_df %>%
 simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
   
   # ## For local machine
-  # core_df <- param_df
-  # i = 1
+  # i <- 1
+  # core_df <- param_df_split[[i]]
   # ##
   
   # Create a results list
@@ -120,32 +120,64 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
     
     # Randomly create crosses from the TP individuals
     crossing_block <- sim_crossing_block(parents = indnames(tp1), n.crosses = n_crosses)
+    # Pedigree to accompany the crosses
+    ped <- sim_pedigree(n.ind = sim_pop_size, n.selfgen = Inf)
     
     
-    # Pass to PopVar
-    pred_out <- pop.predict(G.in = geno_use, y.in = pheno_use, map.in = map_use,
-                            crossing.table = crossing_block, tail.p = 0.1, nInd = sim_pop_size,
-                            min.maf = 0, mkr.cutoff = 1, entry.cutoff = 1, remove.dups = FALSE,
-                            nSim = n_pops, nCV.iter = 1, models = "rrBLUP", impute = "pass")
+    # # # Pass to PopVar
+    # pred_out <- pop.predict(G.in = geno_use, y.in = pheno_use, map.in = map_use,
+    #                         crossing.table = crossing_block, tail.p = 0.1, nInd = sim_pop_size,
+    #                         min.maf = 0, mkr.cutoff = 1, entry.cutoff = 1, remove.dups = FALSE,
+    #                         nSim = n_pops, nCV.iter = 1, models = "rrBLUP", impute = "pass")
+    # 
+    # # Tidy
+    # tidy_pred_out <- pred_out$predictions %>%
+    #   mutate_all(unlist) %>%
+    #   as_data_frame() %>%
+    #   select(parent1 = Par1, parent2 = Par2, mpv = midPar.Pheno, pred_mu = pred.mu,
+    #          pred_varG = pred.varG, pred_musp = mu.sp_high)
     
-    # Tidy
-    tidy_pred_out <- pred_out$predictions %>% 
-      mutate_all(unlist) %>% 
-      as_data_frame() %>%
-      select(parent1 = Par1, parent2 = Par2, mpv = midPar.Pheno, pred_mu = pred.mu,
-             pred_varG = pred.varG, pred_musp = mu.sp_high)
+    
+    ## Use the expected variance calculation as a sanity check - Actually it's much quicker than popvar
+    # First predict marker effects, then predict the genotypic value of the TP
+    tp_mar_eff <- pred_mar_eff(genome = genome1, training.pop = tp1) %>%
+      pred_geno_val(genome = genome1, training.pop = ., candidate.pop = .)
+    tp_mar_eff$pred_val <- tp_mar_eff$pred_val %>% mutate(ind = as.character(ind))
+    
+    # Create a new genome
+    genome2 <- genome1
+    # Assign the qtl model with every marker as a QTL
+    marker_qtl_model <- find_markerpos(genome = genome1, marker = tp_mar_eff$mar_eff$marker) %>%
+      mutate(qtl_name = row.names(.)) %>%
+      left_join(., tp_mar_eff$mar_eff, by = c("qtl_name" = "marker")) %>%
+      mutate(dom_eff = 0, qtl1_pair = NA) %>%
+      select(chr, pos, add_eff = trait1, dom_eff, qtl_name, qtl1_pair)
+    
+    # Add to the genome
+    genome2$gen_model <- list(marker_qtl_model)
     
     
-    
+    # Use the genetic variance prediction function
+    pred_out_alt <- calc_exp_genvar(genome = genome2, pedigree = ped, founder.pop = tp1, crossing.block = crossing_block) %>%
+      left_join(x = ., y = tp_mar_eff$pred_val, by = c("parent1" = "ind")) %>% left_join(x = ., y = tp_mar_eff$pred_val, by = c("parent2" = "ind")) %>%
+      rename(exp_varG = exp_var) %>%
+      mutate(exp_mu = (trait1.x + trait1.y) / 2,
+             exp_musp = exp_mu + (1.76 * sqrt(exp_varG))) %>%
+      select(-contains("trait")) %>%
+      rename_all(~str_replace(., "exp", "pred"))
+      
+    pred_out <- pred_out_alt
+    ##
+
     
     ## Calculate the expected genetic variance in these populations
-    expected_var <- calc_exp_genvar(genome = genome1, pedigree = ped, founder.pop = pv_pop, crossing.block = crossing_block) %>%
+    expected_var <- calc_exp_genvar(genome = genome1, pedigree = ped, founder.pop = tp1, crossing.block = crossing_block) %>%
       rename(exp_varG = exp_var) %>%
       mutate(exp_musp = exp_mu + (1.76 * sqrt(exp_varG)))
     
     
     ## Summarize the expected and predicted values
-    expected_predicted <- full_join(tidy_pred_out, expected_var, by = c("parent1", "parent2")) %>% 
+    expected_predicted <- full_join(pred_out, expected_var, by = c("parent1", "parent2")) %>% 
       gather(parameter, value, pred_mu:exp_musp) %>% 
       separate(parameter, c("type", "parameter"), sep = "_") %>% 
       spread(type, value)
