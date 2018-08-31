@@ -46,7 +46,7 @@ n_crosses <- 50
 ## Outline the parameters to perturb
 h2_list <- c(0.2, 0.5, 0.8)
 nQTL_list <- c(30, 100)
-map_error_list <- c(0, 0.01, 0.10, 1, 10)
+map_error_list <- c(0, 0.01, 0.10)
 tp_size_list <- seq(150, 600, by = 150)
 
 # Create a data.frame of parameters
@@ -97,24 +97,35 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
     # Sample from the genotypes
     sample_genos <- s2_cap_genos[sort(sample(nrow(s2_cap_genos), size = tp_size)),]
     tp <- create_pop(genome = genome1, geno = sample_genos, ignore.gen.model = FALSE)
-    # Genotype
-    tp_geno <- genotype(genome = genome1, pop = tp)
+    # # Genotype
+    # pv_geno <- genotype(genome = genome1, pop = tp)
     
     # Phenotype
     tp1 <- sim_phenoval(pop = tp, h2 = h2, n.env = n_env, n.rep = n_rep)
-    # Convert the phenotypes into something PopVar will handle
-    pheno_use <- tp1$pheno_val$pheno_mean
-    # Convert genotypes into something useable for PopVar
-    geno_use <- as.data.frame(cbind( c("", row.names(tp_geno)), rbind(colnames(tp_geno), tp_geno)) )
-  
+    par_pop <- tp1
     
+    ##### Create a set of cycle 1 progeny from which to predict crosses
+    ## Select the best tp individuals
+    tp_select <- select_pop(pop = tp1, intensity = 0.1, index = 1, type = "phenotypic")
     # Randomly create crosses from the TP individuals
-    crossing_block <- sim_crossing_block(parents = indnames(tp1), n.crosses = n_crosses)
+    crossing_block <- sim_crossing_block(parents = indnames(tp_select), n.crosses = 40)
+    # Pedigree to accompany the crosses
+    ped <- sim_pedigree(n.ind = 25, n.selfgen = Inf)
+    
+    # Make theses crosses
+    par_pop <- sim_family_cb(genome = genome1, pedigree = ped, founder.pop = tp_select, crossing.block = crossing_block)
+    #####
+
+    # Randomly create crosses from the TP individuals
+    crossing_block <- sim_crossing_block(parents = indnames(par_pop), n.crosses = n_crosses)
     # Pedigree to accompany the crosses
     ped <- sim_pedigree(n.ind = sim_pop_size, n.selfgen = Inf)
     
     
     # # # Pass to PopVar
+    # # Convert genotypes into something useable for PopVar
+    # geno_use <- as.data.frame(cbind( c("", row.names(pv_geno)), rbind(colnames(pv_geno), pv_geno)) )
+    # 
     # pred_out <- pop.predict(G.in = geno_use, y.in = pheno_use, map.in = map_use,
     #                         crossing.table = crossing_block, tail.p = 0.1, nInd = sim_pop_size,
     #                         min.maf = 0, mkr.cutoff = 1, entry.cutoff = 1, remove.dups = FALSE,
@@ -130,9 +141,10 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
     
     ## Use the expected variance calculation as a sanity check - Actually it's much quicker than popvar
     # First predict marker effects, then predict the genotypic value of the TP
-    tp_mar_eff <- pred_mar_eff(genome = genome1, training.pop = tp1) %>%
-      pred_geno_val(genome = genome1, training.pop = ., candidate.pop = .)
-    tp_mar_eff$pred_val <- tp_mar_eff$pred_val %>% mutate(ind = as.character(ind))
+    tp_mar_eff <- pred_mar_eff(genome = genome1, training.pop = tp1)
+    par_pop <- pred_geno_val(genome = genome1, training.pop = tp1, candidate.pop = par_pop)
+    par_pop$pred_val <- par_pop$pred_val %>% 
+      mutate(ind = as.character(ind))
     
     # Create a new genome
     genome2 <- genome1
@@ -153,22 +165,20 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
     
     
     # Use the genetic variance prediction function
-    pred_out_alt <- calc_exp_genvar(genome = genome2, pedigree = ped, founder.pop = tp1, crossing.block = crossing_block) %>%
-      left_join(x = ., y = tp_mar_eff$pred_val, by = c("parent1" = "ind")) %>% left_join(x = ., y = tp_mar_eff$pred_val, by = c("parent2" = "ind")) %>%
-      rename(exp_varG = exp_var) %>%
+    pred_out <- calc_exp_genvar(genome = genome2, pedigree = ped, founder.pop = par_pop, crossing.block = crossing_block) %>%
+      left_join(x = ., y = par_pop$pred_val, by = c("parent1" = "ind")) %>% left_join(x = ., y = par_pop$pred_val, by = c("parent2" = "ind")) %>%
       mutate(exp_mu = (trait1.x + trait1.y) / 2,
              exp_musp = exp_mu + (1.76 * sqrt(exp_varG))) %>%
       select(-contains("trait")) %>%
       rename_all(~str_replace(., "exp", "pred"))
-      
-    pred_out <- pred_out_alt
+
     ##
 
     
     ## Calculate the expected genetic variance in these populations
-    expected_var <- calc_exp_genvar(genome = genome1, pedigree = ped, founder.pop = tp1, crossing.block = crossing_block) %>%
-      rename(exp_varG = exp_var) %>%
-      mutate(exp_musp = exp_mu + (1.76 * sqrt(exp_varG)))
+    expected_var <- calc_exp_genvar(genome = genome1, pedigree = ped, founder.pop = par_pop, crossing.block = crossing_block) %>%
+      mutate(exp_musp = exp_mu + (1.76 * sqrt(exp_varG))) %>%
+      select(-trait)
     
     
     ## Summarize the expected and predicted values
