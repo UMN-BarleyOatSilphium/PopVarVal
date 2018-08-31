@@ -46,7 +46,7 @@ n_crosses <- 50
 ## Outline the parameters to perturb
 h2_list <- c(0.2, 0.5, 0.8)
 nQTL_list <- c(30, 100)
-map_error_list <- c(0.01, 0.10, 1, 10)
+map_error_list <- c(0, 0.01, 0.10, 1, 10)
 tp_size_list <- seq(150, 600, by = 150)
 
 # Create a data.frame of parameters
