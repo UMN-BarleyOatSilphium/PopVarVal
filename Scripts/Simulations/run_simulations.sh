@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#PBS -l walltime=04:00:00,mem=22gb,nodes=1:ppn=8
+#PBS -l walltime=12:00:00,mem=22gb,nodes=1:ppn=8
 #PBS -N PopVar_suitability_simulation
 #PBS -M neyha001@umn.edu
 #PBS -m abe
@@ -12,4 +12,7 @@ cd /panfs/roc/groups/6/smithkp/neyha001/Genomic_Selection/PopVarVal/Scripts/Simu
 module load R/3.5.0
 
 ## Run the simulation
-Rscript popvar_suitability_simulation.R
+# Rscript popvar_suitability_simulation.R
+
+# For genetic correlation
+Rscript popvar_gencor_simulation.R
