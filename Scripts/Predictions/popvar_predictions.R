@@ -28,8 +28,8 @@ genos_use <- s2_imputed_mat[c(tp_geno, pot_pars_geno),]
 G_in <- as.data.frame(cbind( c("", row.names(genos_use)), rbind(colnames(genos_use), genos_use)) )
 
 # Format the phenos
-# phenos_use <- tp_prediction_BLUE %>% 
-phenos_use <- tp_relevant_BLUE %>%
+phenos_use <- tp_prediction_BLUE %>%
+# phenos_use <- tp_relevant_BLUE %>%
   spread(trait, value) %>%
   as.data.frame()
 
@@ -38,6 +38,17 @@ map_use <- snp_info %>%
   select(marker = `rs#`, chrom, cM_pos) %>%
   as.data.frame()
   
+## Subset the crosses that were made
+cross_list <- entry_list %>%
+  filter(Group == "Experimental") %>%
+  separate(Pedigree, c("parent1", "parent2"), sep = "/") %>%
+  rename_all(str_to_lower)
+
+# Format the crossing block
+crossing_block <- cross_list %>%
+  distinct(family, parent1, parent2) %>%
+  as.data.frame() %>%
+  column_to_rownames("family")
 
 
 # Determine the number of cores
@@ -82,7 +93,46 @@ save_file <- file.path(result_dir, "all_family_prediction_results.RData")
 save("all_family_pred", file = save_file)
 
 
-## Use the function for the expected genetic variance
+
+
+
+## Separate predictions of FHB severity using TP data from each location
+phenos_use_FHB <- tp_prediction_BLUE_FHB %>%
+  rename(FHBSeverity = value) %>%
+  as.data.frame() %>%
+  split(.$location)
+  
+
+cross_pred_out_FHB <- phenos_use_FHB %>%
+  map_df(~{
+    
+    df <- .
+    df1 <- select(df, -location)
+    
+    # Return predictions
+    out <- pop.predict(G.in = G_in, y.in = df1, map.in = map_use, 
+                       crossing.table = crossing_block, tail.p = 0.1, nInd = 150,
+                       min.maf = 0, mkr.cutoff = 1, entry.cutoff = 1, remove.dups = FALSE,
+                       nSim = 25, nCV.iter = 1, models = "rrBLUP", impute = "pass")
+  
+    out$predictions %>% 
+      mutate_all(unlist) %>% 
+      as_data_frame() %>%
+      mutate(trait = "FHBSeverity", location = unique(df$location)) %>%
+      select(trait, location, names(.))
+    
+  })
+
+
+pred_results_FHB <- cross_pred_out_FHB
+
+## Save
+save_file <- file.path(result_dir, "prediction_results_FHB.RData")
+save("pred_results_FHB", file = save_file)
+
+
+
+
 
 
 
@@ -92,16 +142,6 @@ save("all_family_pred", file = save_file)
 
 # ### Predictions using different population sizes
 # # Cross data
-# cross_list <- entry_list %>%
-#   filter(Group == "Experimental") %>%
-#   separate(Pedigree, c("parent1", "parent2"), sep = "/") %>%
-#   rename_all(str_to_lower)
-# 
-# # Format the crossing block
-# crossing_block <- cross_list %>%
-#   distinct(family, parent1, parent2) %>%
-#   as.data.frame() %>%
-#   column_to_rownames("family")
 # 
 # 
 # ## List of TP sizes

@@ -102,8 +102,6 @@ vp_family_musp <- vp_family_tomodel1 %>%
 ### Confidence intervals
 # Use parametric bootstrapping to estimate confidence intervals for mu and varG
 
-
-
 vp_family_varG_boot <- vp_family_varG1 %>%
   group_by(trait, family) %>%
   do({
@@ -211,13 +209,92 @@ vp_family_varG_FHB_method1 %>%
   facet_wrap(~ location, ncol = 2, scales = "free")
 
 
+### Confidence intervals
+# Use parametric bootstrapping to estimate confidence intervals for mu and varG
+
+vp_family_varG_FHB_boot <- vp_family_varG1_FHB %>%
+  group_by(location, family) %>%
+  do({
+    out <- .
+    fit <- out$fit[[1]]
+    
+    # Define a function for harvesting the statistics
+    stat <- function(x) c(mu = unname(fixef(x)[1]), varG = subset(as.data.frame(VarCorr(x)), grp == "line_name", vcov, drop = T))
+    boot_out <- bootMer(x = fit, FUN = stat, nsim = boot_rep)
+    
+    # Return results
+    data_frame(
+      parameter = c("mu", "varG"),
+      base = boot_out$t0,
+      bias = colMeans(boot_out$t) - boot_out$t0,
+      se = apply(X = boot_out$t, MARGIN = 2, FUN = sd),
+      lower = apply(X = boot_out$t, MARGIN = 2, FUN = quantile, probs = alpha / 2),
+      upper = apply(X = boot_out$t, MARGIN = 2, FUN = quantile, probs = 1 - (alpha / 2)) )
+    
+  })
+
+
+
+# Use non-parametric bootsrapping for the superior progeny mean
+vp_family_musp_FHB_boot <- vp_family_FHB_musp %>% 
+  group_by(location, family) %>%
+  do({
+    out <- .
+    boot_samples <- unnest(out, means) %>% 
+      filter(term != "family_mean") %>% 
+      select(mean) %>%
+      bootstrap(n = boot_rep)
+    
+    boot_out <- boot_samples$strap %>%
+      map_dbl(~as.data.frame(.) %>% 
+                subset(mean <= quantile(mean, probs = i), mean, drop = T) %>% 
+                mean() )
+    
+    # Return results
+    data_frame(
+      parameter = "musp",
+      base = out$mu_sp,
+      bias = mean(boot_out) - out$mu_sp,
+      se = sd(boot_out),
+      lower = quantile(boot_out, probs = alpha / 2),
+      upper = quantile(boot_out, probs = 1 - (alpha / 2)) )
+    
+  })
+
+
+# Combine
+vp_family_boot_FHB <- bind_rows(vp_family_varG_FHB_boot, vp_family_musp_FHB_boot) %>%
+  arrange(location, family) %>%
+  ungroup()
+
+## Plot with CI
+g_family_boot <- vp_family_boot_FHB %>%  
+  mutate(facet = str_c(location, "_", parameter),
+         expectation = base + bias) %>%
+  ggplot(aes(x = family, y = base, ymin = lower, ymax = upper)) + 
+  geom_errorbar(position = position_dodge(0.9), width = 0.5) + 
+  geom_point(aes(color = parameter, shape = "base")) + 
+  # geom_point(aes(y = expectation, color = parameter, shape = "expectation")) +
+  facet_wrap(~ facet, scale = "free", nrow = 2, 
+             labeller = labeller(facet = function(x) str_split(x, pattern = "_", simplify = T)[,1])) + 
+  theme_acs() +
+  theme(axis.text.x = element_blank(), axis.title = element_blank())
+
+# Save this
+ggsave(filename = "family_parameter_boot_FHB.jpg", plot = g_family_boot, path = fig_dir, height = 6, width = 6, dpi = 1000)
+
+
+
 
 ## Save the variance calculations
-save("vp_family_varG_method1", "vp_family_varG_FHB_method1", "vp_family_musp", "vp_family_FHB_musp", "vp_family_boot",
-     file = file.path(result_dir, "vp_family_analysis.RData"))
+save("vp_family_varG_method1", "vp_family_varG_FHB_method1", "vp_family_musp", "vp_family_FHB_musp", 
+     "vp_family_boot", "vp_family_boot_FHB", file = file.path(result_dir, "vp_family_analysis.RData"))
 
 
 load(file.path(result_dir, "vp_family_analysis.RData"))
+
+
+
 
 
 

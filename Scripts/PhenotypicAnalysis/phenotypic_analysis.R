@@ -79,9 +79,9 @@ tp_var_prop <- tp_analysis %>%
 # 8 PlantHeight line_name             10.9     0.358    
 # 9 PlantHeight Residual               0.00245 0.0000808
 
-g_tp_prediction_varprop <- tp_var_prop %>% 
+(g_tp_prediction_varprop <- tp_var_prop %>% 
   ggplot(aes(x = trait, y = var_prop, fill = source)) + 
-  geom_col(position = "dodge")
+  geom_col(position = "dodge"))
 
 ggsave(filename = "tp_prediction_varprop.jpg", plot = g_tp_prediction_varprop, path = fig_dir, height = 5, width = 5, dpi = 1000)
 
@@ -186,6 +186,93 @@ tp_relevant_BLUE <- tp_analysis %>%
   ungroup() %>%
   select(-n_e)
 
+
+
+
+
+#### Separate analysis for CRM and STP for FHB
+## Run models
+tp_analysis_FHB <- tp_prediction_tomodel %>%
+  filter(trait == "FHBSeverity") %>%
+  group_by(location) %>%
+  do({
+    df <- .
+    print(unique(df$trait))
+    summarize_pheno(data = df)
+  })
+
+
+## Look at variance components and heritability
+(g_tp_prediction_h2 <- tp_analysis_FHB %>% 
+    mutate(h2 = map_dbl(h2, "heritability")) %>% 
+    qplot(x = location, y = h2, geom = "col", fill = "blue", data = .) +
+    geom_text(aes(label = str_c("Envs: ", n_e)), vjust = 2) +
+    geom_text(aes(label = str_c("h2: ", round(h2, 3))), vjust = 4) + 
+    scale_fill_discrete(guide = FALSE))
+
+ggsave(filename = "tp_prediction_h2_FHB.jpg", plot = g_tp_prediction_h2, path = fig_dir, height = 5, width = 5, dpi = 1000)
+
+
+tp_var_prop <- tp_analysis_FHB %>% 
+  mutate(varcomp = map(h2, "var_comp")) %>%
+  unnest(varcomp) %>% 
+  group_by(location) %>% 
+  mutate(var_prop = variance / sum(variance)) 
+
+# location   n_e source                variance var_prop
+# 1 CRM          2 line_name:environment 45.4     0.687   
+# 2 CRM          2 line_name             20.6     0.312   
+# 3 CRM          2 Residual               0.0232  0.000352
+# 4 STP          2 line_name:environment 47.3     0.890   
+# 5 STP          2 line_name              5.87    0.110   
+# 6 STP          2 Residual               0.00634 0.000119
+
+(g_tp_prediction_varprop <- tp_var_prop %>% 
+    ggplot(aes(x = location, y = var_prop, fill = source)) + 
+    geom_col(position = "dodge"))
+
+ggsave(filename = "tp_prediction_varprop_FHB.jpg", plot = g_tp_prediction_varprop, path = fig_dir, height = 5, width = 5, dpi = 1000)
+
+
+
+tp_analysis_FHB %>%
+  unnest(sig_test) %>%
+  mutate(annotate = case_when(p_value <= 0.01 ~ "***", p_value <= 0.05 ~ "**", p_value <= 0.1 ~ "*", TRUE ~ ""))
+
+# location   n_e term     df statistic      p_value annotate
+# 1 CRM          2 g         1     17.6  0.0000280    ***     
+# 2 CRM          2 ge        1     32.4  0.0000000124 ***     
+# 3 STP          2 g         1      2.03 0.154        ""      
+# 4 STP          2 ge        1     20.8  0.00000512   *** 
+
+## G and GxE are significant for all traits, though more so for FHB severity.
+
+# Unnest the blues
+tp_prediction_BLUE_FHB <- tp_analysis_FHB %>%
+  unnest(BLUE) %>%
+  ungroup() %>%
+  select(-n_e)
+
+
+
+## TP mean and range
+tp_prediction_BLUE %>% 
+  group_by(trait) %>% 
+  summarize_at(vars(value), funs(min, max, mean))
+
+# trait         min   max  mean
+# 1 FHBSeverity  5.08  38.6  16.1
+# 2 HeadingDate 43.9   56.5  50.2
+# 3 PlantHeight 60.1   87.4  73.9
+
+tp_prediction_BLUE_FHB %>% 
+  group_by(location) %>% 
+  summarize_at(vars(value), funs(min, max, mean))
+
+# trait         min   max  mean
+# 1 FHBSeverity  5.08  38.6  16.1
+# 2 HeadingDate 43.9   56.5  50.2
+# 3 PlantHeight 60.1   87.4  73.9
 
 
 
@@ -311,7 +398,8 @@ vp_FHB_BLUE <- vp_analysis_FHB %>%
 
 
 ## Save the BLUEs
-save("tp_prediction_BLUE", "tp_relevant_BLUE", "vp_BLUE", "vp_FHB_BLUE", file = file.path(data_dir, "PVV_BLUE.RData"))
+save("tp_prediction_BLUE", "tp_relevant_BLUE", "tp_prediction_BLUE_FHB", "vp_BLUE", "vp_FHB_BLUE", 
+     file = file.path(data_dir, "PVV_BLUE.RData"))
 
 # Load
 load(file.path(data_dir, "PVV_BLUE.RData"))
@@ -322,15 +410,7 @@ load(file.path(data_dir, "PVV_BLUE.RData"))
 
 
 
-## TP mean and range
-tp_prediction_BLUE %>% 
-  group_by(trait) %>% 
-  summarize_at(vars(value), funs(min, max, mean))
 
-# trait         min   max  mean
-# 1 FHBSeverity  5.08  38.6  16.1
-# 2 HeadingDate 43.9   56.5  50.2
-# 3 PlantHeight 60.1   87.4  73.9
 
 
 ## Other plots
