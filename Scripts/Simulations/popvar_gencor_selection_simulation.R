@@ -201,11 +201,7 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
     pred_out_select <- pred_out_index %>% 
       filter(trait == "trait1")
     pred_out_select <- pred_out_select[order(pred_out_select$pred_muspC, decreasing = TRUE)[1:cross_select],]
-    cb_select <- select(pred_out_select, contains("parent"))
-    
-    ## Create these crosses
-    cycle1 <- sim_family_cb(genome = genome1, pedigree = ped, founder.pop = par_pop, crossing.block = cb_select) %>%
-      pred_geno_val(genome = genome1, training.pop = tp1, candidate.pop = .)
+    cb_select_corG <- select(pred_out_select, contains("parent"))
     
     # ## Select progeny on a range of selection intensities
     # selections <- data_frame(k_sp = seq(0.05, 1, by = 0.05))
@@ -223,10 +219,6 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
       mutate(index = trait1 + trait2)
     pred_out_select_mean <- pred_out_select_mean[order(pred_out_select_mean$index, decreasing = T)[1:cross_select],]
     cb_select_mean <- select(pred_out_select_mean, contains("parent"))
-    
-    ## Create these crosses
-    cycle1_mean <- sim_family_cb(genome = genome1, pedigree = ped, founder.pop = par_pop, crossing.block = cb_select_mean) %>%
-      pred_geno_val(genome = genome1, training.pop = tp1, candidate.pop = .)
     
     # ## Select progeny on a range of selection intensities
     # selections_mean <- data_frame(k_sp = seq(0.05, 1, by = 0.05))
@@ -246,10 +238,6 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
     pred_out_select_musp <- pred_out_select_musp[order(pred_out_select_musp$index, decreasing = TRUE)[1:cross_select],]
     cb_select_musp <- select(pred_out_select_musp, contains("parent"))
     
-    ## Create these crosses
-    cycle1_musp <- sim_family_cb(genome = genome1, pedigree = ped, founder.pop = par_pop, crossing.block = cb_select_musp) %>%
-      pred_geno_val(genome = genome1, training.pop = tp1, candidate.pop = .)
-    
     
     # ## Select progeny on a range of selection intensities
     # selections_musp <- data_frame(k_sp = seq(0.05, 1, by = 0.05))
@@ -260,6 +248,23 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
     # })
     # 
     
+    ## Now select random crosses
+    cb_select_rand <- pred_out_index %>% 
+      select(contains("parent")) %>% 
+      sample_n(cross_select)
+    
+    
+    ## Combine crossing blocks
+    cb_list <- list(corG = cb_select_corG, mean = cb_select_mean, musp = cb_select_musp, rand = cb_select_rand)
+    
+    ### Create all of the crosses
+    cycle1_list <- cb_list %>%
+      map(~sim_family_cb(genome = genome1, pedigree = ped, founder.pop = par_pop, crossing.block = .) %>%
+            pred_geno_val(genome = genome1, training.pop = tp1, candidate.pop = .))
+    
+    
+    
+    
     
     # ## Combine the selections
     # selection_comb <- bind_rows(
@@ -269,7 +274,7 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
     # )
     
     ## Create a list of selections
-    selections <- list(mean = cycle1_mean, musp = cycle1_musp, corG = cycle1) %>%
+    selections <- cycle1_list %>%
       map(~select_pop(pop = ., intensity = 0.1, index = c(1,1), type = "genomic")$geno_val)
     
     response <- selections %>%
@@ -287,18 +292,15 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
       mutate(stand_response = (mean_gv - mean_gv_mean) / base_sdG)
     
     ## How many of the crosses are the same?
-    common_cross_corG_mean <- nrow(intersect(cb_select, cb_select_mean))
-    common_cross_corG_musp <- nrow(intersect(cb_select, cb_select_musp))
-    common_cross_mean_musp <- nrow(intersect(cb_select_mean, cb_select_musp))
-    
-    
+    common_crosses <- combn(x = cb_list, m = 2, simplify = FALSE) %>% 
+      map_df(~data.frame(selection1 = names(.)[1], selection2 = names(.)[2], common_cross = nrow(reduce(., intersect)),
+                         stringsAsFactors = FALSE))
     
     
     ## Add the response and other results
     results_out[[i]] <- list(
       response = response_summary,
-      common_cross = data.frame(cb1 = c("corG", "corG", "musp"), cb2 = c("mean", "musp", "mean"), 
-                                common_cross = c(common_cross_corG_mean, common_cross_corG_musp, common_cross_mean_musp))
+      common_cross = common_crosses
     )
     
   }
