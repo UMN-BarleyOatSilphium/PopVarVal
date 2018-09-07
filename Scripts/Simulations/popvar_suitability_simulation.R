@@ -46,7 +46,7 @@ n_crosses <- 50
 ## Outline the parameters to perturb
 h2_list <- c(0.2, 0.5, 0.8)
 nQTL_list <- c(30, 100)
-map_error_list <- c(0, 0.01, 0.10)
+map_error_list <- c(0, 0.01, 1)
 tp_size_list <- seq(150, 600, by = 150)
 
 # Create a data.frame of parameters
@@ -165,20 +165,31 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
     
     
     # Use the genetic variance prediction function
-    pred_out <- calc_exp_genvar(genome = genome2, pedigree = ped, founder.pop = par_pop, crossing.block = crossing_block) %>%
+    exp_gen_var <- calc_exp_genvar1(genome = genome2, pedigree = ped, founder.pop = par_pop, crossing.block = crossing_block)
+    
+    pred_out <- exp_gen_var$crossing_block %>%
       left_join(x = ., y = par_pop$pred_val, by = c("parent1" = "ind")) %>% left_join(x = ., y = par_pop$pred_val, by = c("parent2" = "ind")) %>%
       mutate(exp_mu = (trait1.x + trait1.y) / 2,
              exp_musp = exp_mu + (1.76 * sqrt(exp_varG))) %>%
       select(-contains("trait")) %>%
       rename_all(~str_replace(., "exp", "pred"))
 
-    ##
+    ## What is the average QTL variance and covariance?
+    pred_var_covar_summ <- map(exp_gen_var$var_covar, ~rbind(.[1], .[2] / 2)) %>% 
+      do.call("cbind", .) %>% 
+      rowMeans()
 
     
     ## Calculate the expected genetic variance in these populations
-    expected_var <- calc_exp_genvar(genome = genome1, pedigree = ped, founder.pop = par_pop, crossing.block = crossing_block) %>%
+    expected_var_out <- calc_exp_genvar1(genome = genome1, pedigree = ped, founder.pop = par_pop, crossing.block = crossing_block)
+    expected_var <- expected_var_out$crossing_block %>%
       mutate(exp_musp = exp_mu + (1.76 * sqrt(exp_varG))) %>%
       select(-trait)
+    
+    exp_var_covar_summ <- map(expected_var_out$var_covar, ~rbind(.[1], .[2] / 2)) %>% 
+      do.call("cbind", .) %>% 
+      rowMeans()
+    
     
     
     ## Summarize the expected and predicted values
@@ -195,7 +206,10 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
              bias = map_dbl(data, ~mean(.$pred - .$exp) / mean(.$exp)))
     
     ## Add the accuracy results to the results list
-    results_out[[i]] <- results_summ
+    results_out[[i]] <- list(
+      results = results_summ,
+      var_covar_summ = list(pred = pred_var_covar_summ, exp = exp_var_covar_summ)
+    )
     
   }
   

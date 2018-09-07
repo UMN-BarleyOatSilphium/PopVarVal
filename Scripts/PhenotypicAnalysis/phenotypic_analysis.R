@@ -360,8 +360,8 @@ vp_family_BLUE %>%
 
 # Combine
 vp_family_BLUE_toplot <- bind_rows(
-  mutate(vp_family_BLUE, type = "family"), 
-  mutate(vp_family_BLUE, family = "All", type = "all"))
+  mutate(vp_family_BLUE, type = "By family"), 
+  mutate(vp_family_BLUE, family = "All", type = "All"))
 
 # Plot per trait
 g_vp_family_density <- vp_family_BLUE_toplot %>%

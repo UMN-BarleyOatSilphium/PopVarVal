@@ -37,8 +37,9 @@ popvar_pred <- list(pred_results_realistic, pred_results_relevant) %>%
 # Distribution of predicted mu, varG, and mu_sp
 popvar_pred_toplot <- popvar_pred %>% 
   map(~select(., parent1:trait, family_mean = pred_mu, variance = pred_varG, mu_sp = musp_low) %>%
-        gather(parameter, prediction, family_mean:mu_sp))
-
+        gather(parameter, prediction, family_mean:mu_sp) %>%
+        mutate(parameter = str_replace_all(parameter, param_replace),
+               parameter = factor(parameter, levels = param_replace)) )
 
 # Mean and range of predictions
 popvar_pred_summ <- popvar_pred_toplot %>% 
@@ -130,9 +131,11 @@ popvar_pred_compare %>%
 
 # Plot
 g_pred_compare <- popvar_pred_compare %>% 
+  # group_by(trait, parameter) %>%
+  # sample_n(1000) %>%
   ggplot(aes(x = realistic, y = relevant)) +
   geom_point() +
-  facet_wrap(~ trait + parameter, scales = "free") +
+  facet_wrap(~ trait + parameter, scales = "free", labeller = labeller(parameter = label_parsed)) +
   theme_acs()
 
 ggsave(filename = "prediction_compare.jpg", plot = g_pred_compare, path = fig_dir, height = 6, width = 8, dpi = 1000)
@@ -171,9 +174,10 @@ g_plot_list <- popvar_pred_toplot %>%
         ggplot(., aes(x = prediction)) +
           geom_histogram() + 
           geom_point(data = subset(df, !is.na(family) & trait == unique(.$trait)), 
-                     aes(y = 10000, color = "selected")) +
-          facet_grid(trait ~ parameter, scale = "free_x", switch = "y") +
-          scale_color_discrete(guide = FALSE) +
+                     aes(y = 10000, color = "selected"), size = 1) +
+          # geom_segment()
+          facet_grid(trait ~ parameter, scale = "free_x", switch = "y", labeller = labeller(parameter = label_parsed)) +
+          scale_color_manual(guide = FALSE, values = umn_palette(n = 3)[3]) +
           # ylim(c(0, 55000)) +
           theme_acs() +
           theme(axis.title = element_blank(), strip.placement = "outside", 
@@ -192,7 +196,7 @@ g_plot_list <- popvar_pred_toplot %>%
 # Save the plots
 for (i in seq_along(g_plot_list)) {
   filename <- str_c(names(g_plot_list)[i], "_predictions_histogram.jpg")
-  ggsave(filename = filename, plot = g_plot_list[[i]], path = fig_dir, height = 6, width = 8, dpi = 1000)
+  ggsave(filename = filename, plot = g_plot_list[[i]], path = fig_dir, height = 4, width = 5, dpi = 1000)
 }
 
 
@@ -200,14 +204,16 @@ for (i in seq_along(g_plot_list)) {
 
 
 ### Plot the mean versus the variance
-g_mean_var_list <- popvar_pred_toplot %>% 
+g_mean_var_list <- popvar_pred_toplot %>%
   map(~{
-    filter(., parameter != "mu_sp") %>% 
-    spread(parameter, prediction) %>%
-    ggplot(aes(x = family_mean, y = variance)) +
-    geom_point(size = 1) +
-    facet_wrap(~ trait, ncol = 3, scales = "free") + 
-    theme_acs()
+    spread(., parameter, prediction) %>%
+      # group_by(trait) %>% sample_n(1000) %>%
+      ggplot(aes(x = mu, y = `V[G]`)) +
+      geom_point(size = 1) +
+      ylab(expression(V[G])) +
+      xlab(expression(mu)) +
+      facet_wrap(~ trait, ncol = 3, scales = "free") + 
+      theme_acs()
   })
   
 # Save the plots
@@ -220,26 +226,30 @@ for (i in seq_along(g_mean_var_list)) {
 
 ## There is this interesting section in the mean v variance plot for FHB severity.
 ## Is this a particular individual?
-popvar_pred_toplot_FHB <- popvar_pred_toplot %>%
-  filter(parameter != "mu_sp", trait == "FHBSeverity") %>%
-  spread(parameter, prediction)
+# popvar_pred_toplot_FHB <- popvar_pred_toplot %>%
+#   filter(parameter != "mu_sp", trait == "FHBSeverity") %>%
+#   spread(parameter, prediction)
 
 noted_parent <- "2MS14_3323-011"
+label <- str_c(noted_parent, "/*")
 
 g_mean_var_noted_list <- popvar_pred_toplot %>% 
   map(~{
-    df <- filter(., parameter != "mu_sp") %>% 
-      spread(parameter, prediction)
+    df <- spread(., parameter, prediction)
     
     df %>%
-      ggplot(aes(x = family_mean, y = variance)) +
+      # group_by(trait) %>% sample_n(1000) %>%
+      ggplot(aes(x = mu, y = `V[G]`)) +
       geom_point(size = 1) +
       geom_point(data = subset(df, parent1 == noted_parent | parent2 == noted_parent),
-                 aes(color = str_c("Cross using parent:\n", noted_parent)), size = 1) +
+                 aes(color = "selected"), size = 1) +
       facet_wrap(~ trait, ncol = 3, scales = "free") + 
-      scale_color_discrete(name = NULL) +
+      scale_color_manual(name = NULL, values = c("selected" = umn_palette(n = 4)[4]), labels = label) +
+      ylab(expression(V[G])) +
+      xlab(expression(mu)) +
       theme_acs() +
-      theme(legend.position = c(0.76, 0.93), legend.margin = margin(), legend.background = element_rect(fill = alpha("white", 0)))
+      theme(legend.position = c(0.07, 0.95), legend.margin = margin(), legend.key.width = unit(0, "lines"),
+            legend.background = element_rect(fill = alpha("white", 0)))
   })
 
 # Save the plots

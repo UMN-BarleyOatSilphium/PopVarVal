@@ -13,17 +13,11 @@ source(file.path(repo_dir, "source_MSI.R"))
 # # Run on a local machine
 # repo_dir <- getwd()
 # source(file.path(repo_dir, "source.R"))
+# library(PopVar)
 
 # Load genotypic and phenotypic data
 load(file.path(geno_dir, "S2_genos_mat.RData"))
 load(file.path(pheno_dir, "PVV_BLUE.RData"))
-
-
-# Cross data
-cross_list <- entry_list %>%
-  filter(Group == "Experimental") %>%
-  separate(Pedigree, c("parent1", "parent2"), sep = "/") %>%
-  rename_all(str_to_lower)
 
 
 # Subset the genos
@@ -44,28 +38,6 @@ map_use <- snp_info %>%
   select(marker = `rs#`, chrom, cM_pos) %>%
   as.data.frame()
   
-
-# # Format the crossing block
-# crossing_block <- cross_list %>%
-#   distinct(family, parent1, parent2) %>%
-#   as.data.frame() %>%
-#   column_to_rownames("family")
-# 
-# ## Predict
-# pred_out <- pop.predict(G.in = G_in, y.in = phenos_use, map.in = map_use, 
-#                         crossing.table = crossing_block, tail.p = 0.1, nInd = 150,
-#                         min.maf = 0, mkr.cutoff = 1, entry.cutoff = 1, remove.dups = FALSE,
-#                         nSim = 25, nCV.iter = 1, models = "rrBLUP", impute = "pass")
-# 
-# 
-# # Convert to DF
-# posthoc_family_pred <- tidy.popvar(pred_out) %>%
-#   left_join(rownames_to_column(crossing_block, "family"), ., by = c("parent1" = "Par1", "parent2" = "Par2"))
-# 
-# 
-# # Save the results
-# save_file <- file.path(result_dir, "post_hoc_prediction_results.RData")
-# save("posthoc_family_pred", file = save_file)
 
 
 # Determine the number of cores
@@ -108,6 +80,89 @@ all_family_pred <- bind_rows(all_par_pred_out)
 ## Save
 save_file <- file.path(result_dir, "all_family_prediction_results.RData")
 save("all_family_pred", file = save_file)
+
+
+## Use the function for the expected genetic variance
+
+
+
+
+
+
+
+# ### Predictions using different population sizes
+# # Cross data
+# cross_list <- entry_list %>%
+#   filter(Group == "Experimental") %>%
+#   separate(Pedigree, c("parent1", "parent2"), sep = "/") %>%
+#   rename_all(str_to_lower)
+# 
+# # Format the crossing block
+# crossing_block <- cross_list %>%
+#   distinct(family, parent1, parent2) %>%
+#   as.data.frame() %>%
+#   column_to_rownames("family")
+# 
+# 
+# ## List of TP sizes
+# tp_size_list <- seq(25, 150, by = 25)
+# n_samples <- 50
+# 
+# ## Generate TP samples
+# tp_samples <- map(tp_size_list, ~replicate(n = n_samples, sort(sample(tp_geno, size = .))))
+# 
+# ## Iterate over the population sizes
+# tp_size_predictions <- tp_samples %>%
+#   map(~{
+#     
+#     sample_mat <- .
+#     
+#     apply(X = sample_mat, MARGIN = 2, FUN = function(tp_geno_sample) {
+#     
+#       # Create data.frame for output
+#       G_in_sample <- G_in[c(tp_geno_sample, pot_pars_geno),]
+#       
+#       # Format the phenos
+#       # phenos_use <- tp_prediction_BLUE %>% 
+#       phenos_use <- tp_relevant_BLUE %>%
+#         spread(trait, value) %>%
+#         as.data.frame() %>%
+#         filter(line_name %in% tp_geno_sample)
+#       
+#       # Format the map
+#       map_use <- snp_info %>% 
+#         select(marker = `rs#`, chrom, cM_pos) %>%
+#         as.data.frame()
+#   
+#   
+#       ## Predict
+#       pred_out <- pop.predict(G.in = G_in_sample, y.in = phenos_use, map.in = map_use,
+#                               crossing.table = crossing_block, tail.p = 0.1, nInd = 150,
+#                               min.maf = 0, mkr.cutoff = 1, entry.cutoff = 1, remove.dups = FALSE,
+#                               nSim = 25, nCV.iter = 1, models = "rrBLUP", impute = "pass")
+#   
+#   
+#       # Convert to DF
+#       tidy.popvar(pred_out) %>%
+#         left_join(rownames_to_column(crossing_block, "family"), ., by = c("parent1" = "Par1", "parent2" = "Par2"))
+#       
+#     })
+#     
+#   })
+# 
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

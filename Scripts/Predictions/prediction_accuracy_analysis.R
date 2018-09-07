@@ -11,6 +11,9 @@
 repo_dir <- getwd()
 source(file.path(repo_dir, "source.R"))
 
+library(cowplot)
+library(gridExtra)
+
 # Boot reps
 boot_reps <- 1000
 alpha <- 0.05
@@ -64,7 +67,7 @@ popvar_pred_obs <- left_join(popvar_pred_cross, vp_family_results) %>%
 set.seed(242)
 pred_acc <- popvar_pred_obs %>% 
   group_by(trait, parameter, tp_set) %>% 
-  do(bootstrap(x = .$prediction, y = .$estimate, fun = "cor", boot.reps = boot_reps, alpha = alpha)) %>%
+  do(cbind(bootstrap(x = .$prediction, y = .$estimate, fun = "cor", boot.reps = boot_reps, alpha = alpha), n_fam = length(.$prediction))) %>%
   rowwise() %>%
   mutate(annotation = ifelse(!between(0, ci_lower, ci_upper), "*", "")) %>%
   ungroup()
@@ -78,25 +81,40 @@ pred_acc <- popvar_pred_obs %>%
 #   ungroup()
 
 
-# trait       parameter   tp_set    statistic  base     se     bias ci_lower ci_upper alpha annotation
-# 1 FHBSeverity family_mean realistic cor       0.504   0.196   0.0126    0.110     0.862  0.05 **        
-# 2 FHBSeverity family_mean relevant  cor       0.502   0.200   0.0106    0.0912    0.858  0.05 **        
-# 3 FHBSeverity mu_sp       realistic cor       0.693   0.163  -0.0159    0.0513    0.926  0.01 ***       
-# 4 FHBSeverity mu_sp       relevant  cor       0.690   0.163  -0.0158    0.0278    0.916  0.01 ***       
-# 5 FHBSeverity variance    realistic cor       0.00693 0.230   0.0376   -0.301     0.485  0.1  ""        
-# 6 FHBSeverity variance    relevant  cor       0.00454 0.238   0.0389   -0.313     0.495  0.1  ""        
-# 7 HeadingDate family_mean realistic cor       0.619   0.0874  0.00293   0.345     0.810  0.01 ***       
-# 8 HeadingDate family_mean relevant  cor       0.673   0.0772  0.00386   0.450     0.846  0.01 ***       
-# 9 HeadingDate mu_sp       realistic cor       0.559   0.0892  0.00559   0.291     0.771  0.01 ***       
-# 10 HeadingDate mu_sp       relevant  cor       0.635   0.0827  0.00421   0.389     0.820  0.01 ***       
-# 11 HeadingDate variance    realistic cor       0.391   0.197   0.0293    0.0452    0.778  0.05 **        
-# 12 HeadingDate variance    relevant  cor       0.449   0.169   0.0306    0.0267    0.850  0.01 ***       
-# 13 PlantHeight family_mean realistic cor       0.524   0.128  -0.00417   0.121     0.793  0.01 ***       
-# 14 PlantHeight family_mean relevant  cor       0.433   0.135  -0.00698   0.0202    0.734  0.01 ***       
-# 15 PlantHeight mu_sp       realistic cor       0.621   0.109  -0.00151   0.257     0.835  0.01 ***       
-# 16 PlantHeight mu_sp       relevant  cor       0.524   0.126  -0.00293   0.146     0.781  0.01 ***       
-# 17 PlantHeight variance    realistic cor       0.482   0.141  -0.00496   0.0112    0.762  0.01 ***       
-# 18 PlantHeight variance    relevant  cor       0.487   0.140  -0.00316   0.0611    0.770  0.01 ***
+# trait       parameter   tp_set    statistic    base     se     bias ci_lower ci_upper n_fam annotation
+# 1 FHBSeverity family_mean realistic cor       0.462   0.203   0.00728   0.0714    0.846    14 *         
+# 2 FHBSeverity family_mean relevant  cor       0.460   0.208   0.0125    0.0446    0.850    14 *         
+# 3 FHBSeverity mu_sp       realistic cor       0.693   0.161  -0.0171    0.277     0.891    14 *         
+# 4 FHBSeverity mu_sp       relevant  cor       0.690   0.153  -0.0123    0.279     0.884    14 *         
+# 5 FHBSeverity variance    realistic cor       0.00693 0.222   0.0353   -0.357     0.556    14 ""        
+# 6 FHBSeverity variance    relevant  cor       0.00454 0.237   0.0284   -0.367     0.580    14 ""        
+# 7 HeadingDate family_mean realistic cor       0.618   0.0829  0.00523   0.447     0.764    26 *         
+# 8 HeadingDate family_mean relevant  cor       0.672   0.0807  0.00411   0.502     0.819    26 *         
+# 9 HeadingDate mu_sp       realistic cor       0.559   0.0882  0.00702   0.381     0.726    26 *         
+# 10 HeadingDate mu_sp       relevant  cor       0.635   0.0837  0.00307   0.460     0.782    26 *         
+# 11 HeadingDate variance    realistic cor       0.391   0.191   0.0251    0.0334    0.767    26 *         
+# 12 HeadingDate variance    relevant  cor       0.449   0.168   0.0316    0.123     0.776    26 *         
+# 13 PlantHeight family_mean realistic cor       0.528   0.128  -0.00212   0.260     0.742    26 *         
+# 14 PlantHeight family_mean relevant  cor       0.438   0.132  -0.0109    0.135     0.659    26 *         
+# 15 PlantHeight mu_sp       realistic cor       0.621   0.106   0.00100   0.386     0.801    26 *         
+# 16 PlantHeight mu_sp       relevant  cor       0.524   0.122  -0.00686   0.252     0.732    26 *         
+# 17 PlantHeight variance    realistic cor       0.482   0.137  -0.00319   0.181     0.702    26 *         
+# 18 PlantHeight variance    relevant  cor       0.487   0.140  -0.00207   0.176     0.732    26 *
+
+## Create and write a table
+pred_table <- pred_acc %>% 
+  mutate(annotation = str_c(round(base, 2), " (", round(ci_lower, 2), ", ", round(ci_upper, 2), ")")) %>% 
+  select(trait, n_fam, tp_set, parameter, annotation) %>% 
+  mutate(parameter = str_replace_all(parameter, param_replace), 
+         parameter = factor(parameter, levels = param_replace)) %>% 
+  spread(parameter, annotation) %>%
+  split(.$tp_set)
+
+# for (df in pred_table) {
+#   write_csv(x = select(df, -tp_set), path = file.path(fig_dir, str_c("pred_accuracy_", unique(df$tp_set), ".csv")))
+# }
+
+
 
 
 # Plot the same results
@@ -131,6 +149,76 @@ for (i in seq_along(g_pred_acc)) {
   filename <- str_c(names(g_pred_acc)[i], "_comb_pred_acc.jpg")
   ggsave(filename = filename, plot = g_pred_acc[[i]], path = fig_dir, height = 6, width = 6, dpi = 1000)
 }
+
+## Edit the manuscript-ready plot
+g_pred_acc_use <- popvar_pred_obs %>%
+  filter(tp_set == "realistic") %>%
+  split(.$tp_set) %>%
+  map(~{
+    df <- .
+    df1 <- df %>% 
+      left_join(., pred_acc, by = c("trait", "parameter", "tp_set")) %>%
+      mutate(parameter = str_replace_all(parameter, param_replace),
+             parameter = factor(parameter, levels = param_replace),
+             annotation = str_c("r[MP]==", round(base, 2), "^'", annotation, "'"))
+    
+    # Split by trait and parameter
+    plot_list <- df1 %>%
+      split(list(.$trait, .$parameter)) %>%
+      map(~{
+        df2 <- .
+        ggplot(df2, aes(x = prediction, y = estimate)) +
+          geom_smooth(method = "lm", se = FALSE) + 
+          geom_point(size = 1) + 
+          geom_text(data = distinct(df2, trait, parameter, annotation), aes(x = Inf, y = -Inf, label = annotation), 
+                    parse = TRUE, size = 3, hjust = 1.1, vjust = -0.5) + 
+          ylab("Observation") +
+          xlab("Prediction") + 
+          facet_grid(trait ~ parameter, scales = "free", labeller = labeller(parameter = label_parsed), switch = "y") + 
+          scale_y_continuous(breaks = scales::pretty_breaks(), labels = function(x) str_pad(x, width = 2, pad = "0")) + 
+          theme_acs() +
+          theme(strip.placement = "outside", axis.title = element_blank())
+        
+      })
+    
+    ## Re-order
+    plot_list <- plot_list[c(1,4,7,2,5,8,3,6,9)]
+    
+    # # Extract the y axis with strips
+    # y_axis_plot <- plot_list[c(1,4,7)] %>% 
+    #   map(~ . + theme(axis.title = element_blank())) %>%
+    #   plot_grid(plotlist = ., ncol = 1)
+    
+    
+    ## Edit parts of the grid
+    # Remove strips
+    plot_list[c(2,3,5,6,8,9)] <- plot_list[c(2,3,5,6,8,9)] %>%
+      map(~ . + theme(strip.text.y = element_blank(), strip.background.y = element_blank()))
+    plot_list[4:9] <- plot_list[4:9] %>%
+      map(~ . + theme(strip.text.x = element_blank(), strip.background.x = element_blank()))
+    
+    # Create the grid by rows
+    top <- plot_grid(plotlist = plot_list[1:3], ncol = 3, align = "h", rel_widths = c(1, 0.9, 0.9))
+    middle <- plot_grid(plotlist = plot_list[4:6], ncol = 3, align = "h", rel_widths = c(1, 0.9, 0.9))
+    bottom <- plot_grid(plotlist = plot_list[7:9], ncol = 3, align = "h", rel_widths = c(1, 0.9, 0.9))
+    
+    
+    # First plot
+    plotgrid <- plot_grid(top, middle, bottom, ncol = 1, rel_heights = c(1, 0.9, 0.9))
+    
+    ## Add axis
+    y_axis <- grid::textGrob(label = "Observation", gp = grid::gpar(fontsize = 8), rot = 90)
+    x_axis <- grid::textGrob(label = "Prediction", gp = grid::gpar(fontsize = 8))
+    
+    # Plot again
+    grid.arrange(arrangeGrob(plotgrid, left = y_axis, bottom = x_axis))
+    
+    })
+
+# Save
+ggsave(filename = "realistic_comb_pred_acc_use.jpg", plot = grid.arrange(g_pred_acc_use$realistic), path = fig_dir,
+       height = 4.5, width = 5, dpi = 1000)
+
 
 
 ## Filter out some outliers for HD variance
@@ -181,14 +269,14 @@ pred_acc %>%
 # First calculate bias on a per-family basis
 popvar_bias <- popvar_pred_obs %>% 
   mutate(bias = (prediction - estimate) / estimate) %>%
-  filter(tp_set == "realistic") %>%
+  # filter(tp_set == "realistic") %>%
   # Filter out extremely large bias (i.e. very small estimate) %>%
   filter(estimate > 1e-5) %>%
-  select(family, trait, parameter, prediction:bias)
+  select(family, trait, tp_set, parameter, prediction:bias)
 
 # Next summarize over traits
 popvar_trait_bias <- popvar_bias %>% 
-  group_by(trait, parameter) %>% 
+  group_by(tp_set, trait, parameter) %>% 
   summarize(bias = mean(prediction - estimate) / mean(estimate))
 
 # Plot
@@ -198,11 +286,22 @@ popvar_bias %>%
   facet_wrap(~ trait + parameter, scales = "free")
 
 # Plot bias versus heritability
-popvar_bias %>% 
-  left_join(., select(vp_family_varG_method1, trait, family, heritability)) %>% 
-  ggplot(aes(x = heritability, y = abs(bias))) + 
+popvar_bias_herit <- popvar_bias %>% 
+  filter(tp_set == "realistic") %>%
+  left_join(., select(vp_family_varG_method1, trait, family, heritability))
+  
+popvar_bias_herit %>%
+  ggplot(aes(x = heritability, y = bias)) + 
   geom_point() + 
   facet_wrap(~ trait + parameter, scales = "free")
+
+## Correlate and plot for variance
+popvar_bias_herit_cor <- popvar_bias_herit %>% 
+  filter(parameter == "variance") %>%
+  group_by(trait) %>% 
+  do(neyhart::bootstrap(x = .$heritability, y = .$bias, fun = "cor", boot.reps = 1000, alpha = alpha))
+  
+
 
 ## View the summary over traits
 popvar_trait_bias %>% 
@@ -213,6 +312,47 @@ popvar_trait_bias %>%
 # 2 HeadingDate     -0.0453 -0.00751   -0.834
 # 3 PlantHeight     -0.102  -0.0356    -0.963
 
+pred_bias_table <- pred_table %>%
+  map(~left_join(., subset(popvar_trait_bias, parameter == "variance", c(tp_set, trait, bias)) ))
+
+## Combine bias with prediction accuracy and write tables
+
+for (df in pred_bias_table) {
+  write_csv(x = select(df, -tp_set), path = file.path(fig_dir, str_c("pred_accuracy_", unique(df$tp_set), ".csv")))
+}
+
+
+
+## Ranges of bias on a per-family basis
+# How many families were excluded based on low estimated variance?
+popvar_pred_obs %>% 
+  filter(parameter == "variance") %>%
+  group_by(tp_set, trait, parameter) %>%
+  summarize(n_removed = sum(estimate <= 1e-5))
+
+
+popvar_bias %>% 
+  filter(parameter == "variance") %>%
+  group_by(tp_set, trait) %>% 
+  do(tidy(summary(.$bias)))
+
+## FHB Severity
+popvar_bias %>% 
+  filter(parameter == "variance", tp_set == "realistic") %>% 
+  filter(trait == "FHBSeverity") %>%
+  summarize(n = n(), n_0.9 = sum(bias > -0.90))
+
+## Heading Date
+popvar_bias %>% 
+  filter(parameter == "variance", tp_set == "realistic") %>% 
+  filter(trait == "HeadingDate") %>%
+  summarize(n = n(), n_0.75 = sum(bias > -0.75))
+
+## Plant height
+popvar_bias %>% 
+  filter(parameter == "variance", tp_set == "realistic") %>% 
+  filter(trait == "PlantHeight") %>%
+  summarize(n = n(), n_9 = sum(bias > -0.9))
 
 
 ### Analyze discriminatory power
