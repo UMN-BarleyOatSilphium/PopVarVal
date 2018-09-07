@@ -24,6 +24,7 @@ load(file.path(geno_dir, "s2_cap_simulation_data.RData"))
 # # Additional libraries
 # library(pbsim)
 # library(PopVar)
+# library(Matrix)
 # 
 # # Load the two-row simulation genotypes
 # load(file.path(gdrive_dir, "BarleyLab/Projects/SideProjects/Resources/s2_cap_simulation_data.RData"))
