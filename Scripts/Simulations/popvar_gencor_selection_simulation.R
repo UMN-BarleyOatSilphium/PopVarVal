@@ -40,7 +40,8 @@ tp_select <- 100
 cross_preselect <- 150
 cross_select <- 25
 n_progeny <- 100
-pred_ksp <- 1.76
+k_sp <- 1.76
+k_sp1 <- 1.12
 
 L <- 100
 n_iter <- 100
@@ -116,27 +117,18 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
     
     ## Predict the genotypic values for the TP, then select the best from the tp
     par_pop <- pred_geno_val(genome = genome1, training.pop = tp1, candidate.pop = tp1) %>%
-      select_pop(pop = ., intensity = tp_select, index = c(1, 1), type = "genomic")
+      # Use indepdent culling levels
+      select_pop(pop = ., intensity = sqrt(tp_select/nind(tp1)), index = c(1, 0), type = "genomic") %>%
+      select_pop(pop = ., intensity = sqrt(tp_select/nind(tp1)), index = c(0, 1), type = "genomic")
     # Get the PGVs
     par_pop_pgv <- par_pop$pred_val %>%
       gather(trait, pgv, -ind) %>%
       mutate(ind = as.character(ind))
-    
-    # ##### Create a set of cycle 1 progeny from which to predict crosses
-    # ## Select the best tp individuals for both traits
-    # tp_select <- select_pop(pop = tp1, intensity = 0.1, index = c(1, 1), type = "phenotypic")
-    # # Randomly create crosses from the TP individuals
-    # crossing_block <- sim_crossing_block(parents = indnames(tp_select), n.crosses = 40)
-    # # Pedigree to accompany the crosses
-    # ped <- sim_pedigree(n.ind = 25, n.selfgen = Inf)
-    # 
-    # # Make theses crosses
-    # par_pop <- sim_family_cb(genome = genome1, pedigree = ped, founder.pop = tp_select, crossing.block = crossing_block) %>%
-    #   pred_geno_val(genome = genome1, training.pop = tp1, candidate.pop = .)
-    # par_pop_pgv <- par_pop$pred_val %>%
-    #   gather(trait, pgv, -ind) %>%
-    #   mutate(ind = as.character(ind))
-    # #####
+  
+    # ## Plot the GVs of the tp and selections
+    # tp1$geno_val %>% 
+    #   mutate(selected = ind %in% indnames(par_pop)) %>% 
+    #   qplot(x = trait1, y = trait2, data = ., color = selected)
     
     
     
@@ -161,44 +153,13 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
     ped <- sim_pedigree(n.ind = n_progeny, n.selfgen = Inf)
     
     
-    ## Use the expected variance calculation as a sanity check - Actually it's much quicker than popvar
-    # First predict marker effects, then predict the genotypic value of the TP
-    tp_mar_eff <- pred_mar_eff(genome = genome1, training.pop = tp1)
-    par_pop$pred_val <- par_pop_pgv
-    
-    # Create a new genome
-    genome2 <- genome1
-    # Tidy the predicted marker effects
-    marker_effs <- tp_mar_eff$mar_eff %>%
-      gather(trait, add_eff, -marker)
-    
-    # Assign the qtl model with every marker as a QTL
-    marker_qtl_model <- find_markerpos(genome = genome1, marker = tp_mar_eff$mar_eff$marker) %>%
-      mutate(qtl_name = row.names(.)) %>%
-      left_join(., marker_effs, by = c("qtl_name" = "marker")) %>%
-      mutate(dom_eff = 0, qtl1_pair = NA) %>%
-      select(trait, chr, pos, add_eff, dom_eff, qtl_name, qtl1_pair) %>%
-      split(.$trait) %>%
-      map(select, -trait)
-    
-    ## Edit the qtl pair for trait2
-    marker_qtl_model$trait2 <- marker_qtl_model$trait2 %>% 
-      mutate(qtl1_pair = qtl_name)
-    
-    # Add to the genome
-    genome2$gen_model <- marker_qtl_model
-    
-    
-    # Use the genetic variance prediction function
-    pred_out <- calc_exp_genvar(genome = genome2, pedigree = ped, founder.pop = par_pop, 
-                                crossing.block = select(crossing_block_use, contains("parent"))) %>%
-      ## Add the predicted mean back in (because the output from this function is the TRUE mpv)
-      left_join(., crossing_block_use %>% select(-index) %>% gather(trait, mean_pgv, trait1, trait2),
-                by = c("parent1", "parent2", "trait")) %>% 
-      select(parent1, parent2, trait, pred_mu = mean_pgv, pred_varG = exp_varG, pred_corG = exp_corG) %>%
-      mutate(pred_musp = pred_mu + (pred_ksp * sqrt(pred_varG))) %>%
+    ## Predict genetic variance and correlation
+    pred_out <- pred_genvar(genome = genome1, pedigree = ped, training.pop = tp1, founder.pop = par_pop, 
+                            crossing.block = select(crossing_block_use, contains("parent"))) %>%
+      mutate(pred_musp = pred_mu + (k_sp * sqrt(pred_varG))) %>%
       group_by(parent1, parent2) %>%
-      mutate(pred_muspC = pred_mu + (pred_ksp * sqrt(pred_varG) * pred_corG), pred_muspC = rev(pred_muspC)) %>% 
+      # mutate(pred_muspC = rev(pred_mu + (k_sp * pred_corG * pred_corG))) %>%
+      mutate(pred_muspC = rev(pred_mu + (k_sp1 * pred_corG * pred_corG))) %>%
       ungroup()
     
     
@@ -293,8 +254,11 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
     
     
     ## Create a list of selections
+    ## Use independent culling levels
     selections <- cycle1_list %>%
-      map(~select_pop(pop = ., intensity = 0.1, index = c(1,1), type = "genomic")$geno_val)
+      map(~select_pop(pop = ., intensity = sqrt(0.1), index = c(1,0), type = "genomic") %>%
+            select_pop(pop = ., intensity = sqrt(0.1), index = c(0, 1), type = "genomic")) %>%
+      map("geno_val")
     
     # ## Select progeny on a range of selection intensities
     # selections <- data_frame(k_sp = seq(0.05, 1, by = 0.05))
@@ -310,13 +274,17 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
       pmap_df(~mutate(.x, selection = .y)) %>%
       # Add the base SD
       gather(trait, mean_gv, contains("trait")) %>% 
-      left_join(., gather(sqrt(tp1$pheno_val$var_comp$V_G), trait, base_sdG), by = "trait")
+      left_join(., gather(sqrt(tp1$pheno_val$var_comp$V_G), trait, base_sdG), by = "trait") %>%
+      left_join(., data.frame(trait = names(par_pop$geno_val)[-1], par_mean_gv = colMeans(par_pop$geno_val[,-1]),
+                              stringsAsFactors = FALSE), by = "trait")
+    
     
     ## Summarize the response
     response_summary <- response %>% 
       left_join(., subset(response, selection == "mean", c(corG, mean_gv, trait)), by = c("trait")) %>% 
-      select(trait, selection, corG = corG.x, mean_gv = mean_gv.x, corG_mean = corG.y, mean_gv_mean = mean_gv.y, base_sdG) %>%
-      mutate(stand_response = (mean_gv - mean_gv_mean) / base_sdG)
+      select(trait, selection, corG = corG.x, mean_gv = mean_gv.x, corG_mean = corG.y, mean_gv_mean = mean_gv.y, par_mean_gv, base_sdG) %>%
+      mutate(relative_response = (mean_gv - mean_gv_mean) / base_sdG,
+             stand_response = (mean_gv - par_mean_gv) / base_sdG)
     
     ## How many of the crosses are the same?
     common_crosses <- combn(x = cb_list, m = 2, simplify = FALSE) %>% 
