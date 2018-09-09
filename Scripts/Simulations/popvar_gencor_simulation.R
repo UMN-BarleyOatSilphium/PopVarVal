@@ -38,7 +38,6 @@ n_cores <- detectCores()
 
 ## Fixed parameters
 sim_pop_size <- 150
-n_pops <- 25
 n_iter <- 25
 n_env <- 3
 n_rep <- 1
