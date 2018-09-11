@@ -46,62 +46,31 @@ sim_meta_tidy %>%
   facet_grid(~ gencor)
 
 
+
 ## Summarize
 sim_out_summ <- sim_summary_tidy %>%
-  group_by_at(vars(trait1_h2, trait2_h2, nQTL, tp_size, gencor, trait, parameter)) %>% 
-  summarize_at(vars(accuracy, bias), funs(mean, sd), na.rm = TRUE) %>% 
+  gather(variable, value, accuracy, bias) %>% 
+  group_by(trait1_h2, trait2_h2, nQTL, tp_size, gencor, trait, parameter) %>% 
+  summarize_at(vars(value), funs(mean, sd), na.rm = TRUE) %>% 
   ungroup()
 
 
 
 
-### Accuracy for genetic correlation
-
-
-# Fit a model
-fit <- lm(accuracy_mean ~ trait1_h2 + trait2_h2 + nQTL + tp_size + gencor, 
-          data = sim_out_summ, subset = parameter == "corG")
-
-## Anova
-anova(fit)
-# Effect plot
-plot(effects::allEffects(fit))
-
+### Fit models
 
 ## Number of QTL does not seem to have a strong effect
+models <- sim_summary_tidy %>%
+  group_by(trait, parameter) %>%
+  do(fit = lm(accuracy ~ trait1_h2 + trait2_h2 + nQTL + tp_size + gencor, data = .))
 
-
-
-### Accuracy for genetic variance
-fit_trait1 <- lm(accuracy_mean ~ trait1_h2 + trait2_h2 + nQTL + tp_size + gencor, 
-                 data = sim_out_summ, subset = (parameter == "varG" & trait == "trait1"))
-anova(fit_trait1)
+# anovas
+models$fit %>% map(anova)
+     
 # Effect plot
-plot(effects::allEffects(fit_trait1))
-
-### Accuracy for genetic variance
-fit_trait2 <- lm(accuracy_mean ~ trait1_h2 + trait2_h2 + nQTL + tp_size + gencor, 
-                 data = sim_out_summ, subset = (parameter == "varG" & trait == "trait2"))
-anova(fit_trait2)
-# Effect plot
-plot(effects::allEffects(fit_trait2))
-
-## As expected, the heritability of trait1 does not affect the accuracy to predict trait2, and vice versa
+plot(effects::allEffects(models$fit[[7]]))
 
 
-### Accuracy of mu_sp
-fit_trait1 <- lm(accuracy_mean ~ trait1_h2 + trait2_h2 + nQTL + tp_size + gencor + trait2_h2:gencor, 
-                 data = sim_out_summ, subset = (parameter == "musp" & trait == "trait1"))
-anova(fit_trait1)
- # Effect plot
-plot(effects::allEffects(fit_trait1))
-
-### Accuracy for genetic variance
-fit_trait2 <- lm(accuracy_mean ~ trait1_h2 + trait2_h2 + nQTL + tp_size + gencor + trait1_h2:gencor, 
-                 data = sim_out_summ, subset = (parameter == "musp" & trait == "trait2"))
-anova(fit_trait2)
-# Effect plot
-plot(effects::allEffects(fit_trait2))
 
 ### Interestingly, the heritability of trait2 affects the accuracy to predict mu_sp of trait1 (and vice versa), 
 ### especially if the correlation between the two traits is stronger
@@ -184,6 +153,53 @@ ggsave(filename = "gen_cor_simulation_bias.jpg", plot = g_bias, path = fig_dir,
 
 
 
+
+### Genetic correlation genetic architecture simulation
+# Load the simulation results
+load(file.path(result_dir, "popvar_gencor_space_simulation_results.RData"))
+
+# Tidy the results and extract the probability of linkage and the degree of linkage
+sim_results_tidy <- popvar_corG_space_simulation_out %>%
+  rename(probcor = probor) %>%
+  mutate(probcor = map(probcor, ~as.data.frame(.) %>% `names<-`(., c("dLinkage", "pLinkage")) %>% tail(., 1))) %>% # The tail is used to remove the probabilities of pleiotropy
+  unnest(probcor)
+  
+## Extract the prediction results
+sim_pred_results <- sim_results_tidy %>%
+  mutate(predictions = map(results, "summary")) %>% 
+  unnest(predictions) %>%
+  mutate_at(vars(trait1_h2:gencor, dLinkage, pLinkage), as.factor)
+
+# Summarize
+sim_pred_summ <- sim_pred_results %>%
+  group_by(trait1_h2, trait2_h2, nQTL, tp_size, gencor, dLinkage, pLinkage, trait, parameter) %>%
+  mutate(n = n()) %>%
+  summarize_at(vars(accuracy, bias, n), funs(mean, sd)) %>%
+  select(-n_sd) %>%
+  ungroup()
+
+
+## Plot results for genetic correlation
+sim_pred_summ %>%
+  filter(dLinkage != 0, parameter == "corG") %>%
+  ggplot(aes(x = pLinkage, y = dLinkage, fill = accuracy_mean)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "blue", high = "red") +
+  facet_wrap(~ gencor, ncol = 2) +
+  theme_acs()
+
+
+## Fit a model
+fit <- lm(accuracy ~ gencor + dLinkage + pLinkage, data = sim_pred_results, subset = parameter == "corG" & dLinkage != 0)
+anova(fit)
+plot(effects::allEffects(fit))
+
+## Nothing is significant
+
+
+
+
+
 ### Genetic correlation selection simulation
 
 
@@ -193,42 +209,110 @@ load(file.path(result_dir, "popvar_gencor_selection_simulation_results.RData"))
 # Tidy
 popvar_selection_sim_tidy <- popvar_simulation_out %>% 
   mutate(response = map(results, "response"), 
-         common_cross = map(results, "common_cross")) %>% 
+         common_cross = map(results, "common_cross"),
+         correlations = map(results, "correlations")) %>% 
   select(-input, -results)
+
+## Unnest the correlations
+correlations_tidy <- popvar_selection_sim_tidy %>%
+  unnest(correlations)
 
 response_tidy <- popvar_selection_sim_tidy %>%
   unnest(response) %>%
-  mutate(delta_corG = corG - corG_mean) %>%
-  mutate_at(vars(trait1_h2, trait2_h2, gencor, arch, trait, selection), as.factor) %>%
-  # Re-calculate standardized response and rename the current version of standardized response
-  mutate(stand_response = mean_gv / base_sdG,
-         relative_stand_response = (mean_gv - mean_gv_mean) / base_sdG)
+  left_join(., filter(correlations_tidy, type == "tp_select_cor"), by = c("trait1_h2", "trait2_h2", "gencor", "arch", "iter")) %>%
+  mutate(delta_corG = corG.x - corG.y,
+         relative_delta_corG = corG.x - corG_mean) %>%
+  select(-corG.x, -corG.y) %>%
+  mutate_at(vars(trait1_h2, trait2_h2, gencor, arch, trait, selection), as.factor)
+
+
+n_iter <- n_distinct(response_tidy$iter)
+
 
 ## Summarize the response results
 response_summary <- response_tidy %>%
-  group_by(trait1_h2, trait2_h2, gencor, arch, trait, selection) %>%
-  summarize_at(vars(stand_response, relative_stand_response, delta_corG), funs(mean, sd)) %>%
-  ungroup()
+  select(-mean_gv, -corG_mean, -mean_gv_mean, -par_mean_gv, -base_sdG, -type) %>%
+  gather(variable, value, stand_response, relative_response, delta_corG, relative_delta_corG) %>%
+  group_by(trait1_h2, trait2_h2, gencor, arch, trait, selection, variable) %>%
+  summarize_at(vars(value), funs(mean, sd)) %>%
+  ungroup() %>%
+  mutate(stat = qt(p = 1 - (alpha / 2), df = n_iter - 1) * (sd / sqrt(n_iter) ),
+         lower = mean - stat, upper = mean + stat)
     
 
   
-# Plot the response to selection
+# Plot the response to selection - relative to the base population
 response_summary %>%
-  filter(selection != "mean") %>%
-  ggplot(aes(x = selection, y = relative_stand_response_mean, shape = selection, color = trait)) +
+  filter(variable == "stand_response") %>%
+  mutate(gencor = parse_number(gencor)) %>%
+  ggplot(aes(x = gencor, y = mean, shape = selection, color = trait)) +
+  geom_hline(yintercept = 1, lty = 2) +
+  geom_point() +
+  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.1) +
+  facet_grid(trait1_h2 + trait2_h2 ~ arch) +
+  theme_acs()
+
+# Response relative to selection on the mean
+response_summary %>%
+  filter(selection != "mean", variable == "relative_response") %>%
+  mutate(gencor = parse_number(gencor)) %>%
+  ggplot(aes(x = gencor, y = mean, shape = selection, color = trait)) +
   geom_hline(yintercept = 0, lty = 2) +
   geom_point() +
-  facet_grid(trait1_h2 + trait2_h2 ~ gencor + arch) +
-  theme_acs() +
-  theme(axis.text.x = element_blank())
+  geom_line() +
+  facet_grid(trait1_h2 + trait2_h2 ~ arch) +
+  theme_acs()
+
+
+## Plot the change in genetic correlation
+response_summary %>% 
+  mutate(gencor = parse_number(gencor)) %>%
+  filter(trait == "trait1", variable == "delta_corG") %>%
+  ggplot(aes(x = gencor, y = mean, shape = selection, color = selection)) +
+  geom_hline(yintercept = 0, lty = 2) +
+  geom_point() +
+  facet_grid(trait1_h2 + trait2_h2 ~ arch) +
+  theme_acs()
+
+# Relative change in genetic correlation
+response_summary %>% 
+  mutate(gencor = parse_number(gencor)) %>%
+  filter(trait == "trait1", selection != "mean") %>%
+  ggplot(aes(x = gencor, y = mean, shape = selection, color = selection)) +
+  geom_hline(yintercept = 0, lty = 2) +
+  geom_point() +
+  facet_grid(trait1_h2 + trait2_h2 ~ arch) +
+  theme_acs()
 
 
 
 ## Create an index of response over traits
 response_summary_index <- response_summary %>% 
   group_by(trait1_h2, trait2_h2, gencor, arch, selection) %>% 
-  summarize(index_response_mean = sum(relative_stand_response_mean)) %>%
+  summarize_at(vars(stand_response_mean, relative_response_mean), mean) %>%
+  # mutate(gencor = parse_number(gencor)) %>%
   ungroup()
+ 
+
+
+# Plot the response to selection - relative to the base population
+response_summary_index %>%
+  ggplot(aes(x = gencor, y = stand_response_mean, shape = selection, color = selection)) +
+  geom_hline(yintercept = 1, lty = 2) +
+  geom_point() +
+  geom_line() +
+  facet_grid(trait1_h2 + trait2_h2 ~ arch) +
+  theme_acs()
+
+# Response relative to selection on the mean
+response_summary_index %>%
+  filter(!selection %in% c("mean", "rand")) %>%
+  ggplot(aes(x = gencor, y = relative_response_mean, shape = selection, color = selection)) +
+  geom_hline(yintercept = 0, lty = 2) +
+  geom_point() +
+  # geom_line() +
+  facet_grid(trait1_h2 + trait2_h2 ~ arch) +
+  theme_acs()
 
 
 # Plot
