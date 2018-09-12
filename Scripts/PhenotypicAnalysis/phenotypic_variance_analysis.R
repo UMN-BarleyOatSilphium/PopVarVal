@@ -299,22 +299,26 @@ load(file.path(result_dir, "vp_family_analysis.RData"))
 
 
 
-## Family analysis
-vp_pedigree <- entry_list %>% 
-  filter(Group == "Experimental") %>% 
-  separate(Pedigree, c("Par1", "Par2"), "/") %>%
-  group_by(Family, Par1, Par2) %>% 
-  summarize(nind = n()) %>%
-  ungroup() %>%
-  select(family = Family, parent1 = Par1, parent2 = Par2, Nind = nind) %>%
-  distinct() %>%
-  mutate(family = str_c("4", family))
+
+
+## Summarize the number of environments per family
+family_env <- vp_family_tomodel %>% 
+  filter(line_name %in% exper) %>% 
+  mutate(family = str_extract(line_name, "4[0-9]{3}")) %>% 
+  group_by(trait, family) %>% 
+  summarize(nEnv = n_distinct(environment)) %>% 
+  ungroup()
+
+
 
 # Create a summary table with the family, number of inidividuals, number of evalulation environments,
-# and the estimated heritability
+# mean, range, and the estimated heritability
 family_summ <- left_join(vp_pedigree, vp_family_varG_method1) %>% 
+  left_join(., family_env) %>%
   select(-family_mean, -variance) %>% 
-  mutate(heritability = formatC(heritability, digits = 2)) %>%
+  mutate(heritability = formatC(heritability, digits = 2, format = "g")) %>%
+  group_by(family) %>%
+  mutate(nEnv = max(nEnv)) %>%
   spread(trait, heritability) %>%
   arrange(desc(Nind))
 
@@ -329,6 +333,26 @@ g_size_h <- left_join(vp_pedigree, vp_family_varG_method1) %>%
   geom_smooth(method = "lm", se = FALSE) +
   facet_grid(~ trait) +
   theme_acs()
+
+
+
+## Create a df of the mean and range of the mean, varG, mu_sp, and h2
+family_estimate_summ <- vp_family_varG_method1 %>% 
+  left_join(., select(vp_family_musp, trait, family, mu_sp)) %>%
+  gather(variable, value, -trait, -family) %>% 
+  mutate(variable = str_replace_all(variable, param_replace),
+         variable = factor(variable, levels = c("mu", "V[G]", "mu[sp]", "heritability"))) %>%
+  group_by(trait, variable) %>%
+  summarize_at(vars(value), funs(min, max, mean)) %>%
+  mutate_at(vars(min, max, mean), ~formatC(x = ., digits = 2, format = "g") %>% str_trim()) %>%
+  mutate(annotation = str_c(mean, " (", min, ", ", max, ")")) %>%
+  select(-min:-mean) %>% 
+  spread(variable, annotation)
+
+## Save
+# Save this
+write_csv(x = family_estimate_summ, path = file.path(fig_dir, "family_estimate_summary.csv"))
+
 
 
 
