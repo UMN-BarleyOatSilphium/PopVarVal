@@ -69,15 +69,13 @@ popvar_pred_summ <- popvar_pred_toplot %>%
 # 8 PlantHeight mu_sp       84.0     92.0  87.8  
 # 9 PlantHeight variance     0.00869  1.43  0.364
 
-# Save as a table
-write_csv(x = popvar_pred_summ$realistic, path = file.path(fig_dir, "prediction_summary.csv"))
 
-## Ranges and mean for selected crosses
-popvar_pred_summ_select <- popvar_pred_toplot %>%   
-  map(~filter(., !is.na(family)) %>% 
+### Generate the same summary for the selected crosses
+popvar_pred_summ_selected <- popvar_pred_toplot %>% 
+  map(~filter(., !is.na(family)) %>%
         group_by(trait, parameter) %>% 
         summarize_at(vars(prediction), funs(min, max, mean)))
-# 
+
 # $`realistic`
 # trait       parameter       min    max   mean
 # 1 FHBSeverity family_mean 12.6    19.4   16.4  
@@ -102,9 +100,38 @@ popvar_pred_summ_select <- popvar_pred_toplot %>%
 # 8 PlantHeight mu_sp       84.2    90.1   87.5  
 # 9 PlantHeight variance     0.0774  0.738  0.353
 
+## Combine the realistic predictions
+popvar_pred_summ_realistic <- bind_rows(
+  mutate(popvar_pred_summ$realistic, group = "AllCrosses"),
+  mutate(popvar_pred_summ_selected$realistic, group = "SelectedCrosses")
+) %>% 
+  mutate_at(vars(min:mean), ~formatC(., digits = 2, format = "g") %>% str_trim()) %>%
+  mutate(annotation = str_c(mean, " (", min, ", ", max, ")")) %>%
+  select(-min:-mean) %>%
+  spread(parameter, annotation)
+
+
+
+# Save as a table
+write_csv(x = popvar_pred_summ_realistic, path = file.path(fig_dir, "prediction_summary.csv"))
+
+
+
 
 ## Fold difference in parameters for all crosses
-popvar_pred_summ$realistic %>% mutate(fold = max / min)
+popvar_pred_summ_selected$realistic %>% 
+  mutate(fold = max / min)
+
+# trait       parameter     min    max   mean  fold
+# 1 FHBSeverity mu        12.6    19.4   16.4    1.54
+# 2 FHBSeverity V[G]       0.0522  1.28   0.388 24.6 
+# 3 FHBSeverity mu[sp]    11.6    18.6   15.4    1.60
+# 4 HeadingDate mu        47.8    54.1   50.2    1.13
+# 5 HeadingDate V[G]       0.0899  1.29   0.370 14.3 
+# 6 HeadingDate mu[sp]    47.0    53.1   49.3    1.13
+# 7 PlantHeight mu        70.9    76.0   73.7    1.07
+# 8 PlantHeight V[G]       0.0552  0.697  0.252 12.6 
+# 9 PlantHeight mu[sp]    70.3    75.4   72.9    1.07
 
 
 ## What are the correlations between the realistic versus relevant predictions?
@@ -361,6 +388,195 @@ param_var <- popvar_pred %>%
 # 1 FHBSeverity    1.15    0.0418     1.21  27.5
 # 2 HeadingDate    1.49    0.0457     1.66  32.7
 # 3 PlantHeight    1.12    0.0212     1.20  53.0
+
+
+## What is the correlation between the kinship coefficient and the predicted genetic variance?
+K <- A.mat(X = s2_imputed_mat_use, min.MAF = 0, max.missing = 1)
+
+pot_par_kinship <- popvar_pred_toplot$realistic %>% 
+  select(parent1, parent2) %>% 
+  pmap_dbl(~K[.x, .y])
+
+
+## Correlation
+popvar_pred_toplot$realistic %>% 
+  mutate(G = pot_par_kinship) %>% 
+  group_by(trait, parameter) %>% 
+  summarize(cor_pred_G = cor(prediction, G))
+
+# trait       parameter cor_pred_G
+# 1 FHBSeverity mu           -0.0430
+# 2 FHBSeverity V[G]         -0.403 
+# 3 FHBSeverity mu[sp]        0.0657
+# 4 HeadingDate mu            0.0427
+# 5 HeadingDate V[G]         -0.464 
+# 6 HeadingDate mu[sp]        0.145 
+# 7 PlantHeight mu            0.0151
+# 8 PlantHeight V[G]         -0.436 
+# 9 PlantHeight mu[sp]        0.100 
+
+# There appears to be a pattern for variance. Plot
+g_pred_G <- popvar_pred_toplot$realistic %>% 
+  mutate(G = pot_par_kinship) %>%
+  filter(parameter == "V[G]") %>%
+  ggplot(aes(x = G, y = prediction)) +
+  geom_point() + 
+  facet_wrap(~ trait, scales = "free", ncol = 2) +
+  theme_acs()
+
+## Save
+ggsave(filename = "kinship_pred_varG.jpg", plot = g_pred_G, path = fig_dir, width = 6, height = 6, dpi = 1000)
+
+## Pull out a notable line
+popvar_pred_toplot2 <- popvar_pred_toplot$realistic %>% 
+  mutate(G = pot_par_kinship) %>%
+  filter(parameter == "V[G]") 
+
+g_pred_G_noted <- popvar_pred_toplot2 %>%  
+  ggplot(aes(x = G, y = prediction)) +
+  geom_point() + 
+  geom_point(data = subset(popvar_pred_toplot2, parent1 == noted_parent | parent2 == noted_parent),
+             aes(color = "selected"), size = 1) +
+  facet_wrap(~ trait, ncol = 3, scales = "free") + 
+  scale_color_manual(name = NULL, values = c("selected" = umn_palette(n = 4)[4]), labels = label) +
+  theme_acs()
+
+## Save
+ggsave(filename = "kinship_pred_varG_noted.jpg", plot = g_pred_G_noted, path = fig_dir, width = 6, height = 3, dpi = 1000)
+
+
+
+  #### Look at the predictions of selected crosses
+
+## First characterize the parents of the families
+
+## Family analysis
+vp_pedigree <- entry_list %>% 
+  filter(Group == "Experimental") %>% 
+  separate(Pedigree, c("Par1", "Par2"), "/") %>% 
+  group_by(Family, Par1, Par2) %>% 
+  summarize(nind = n()) %>%
+  ungroup() %>%
+  select(family = Family, parent1 = Par1, parent2 = Par2, Nind = nind) %>%
+  distinct() %>%
+  mutate(family = str_c("4", family))
+
+
+vp_parents_pedigree <- entry_list %>% 
+  filter(Group == "Potential_Parent") %>% 
+  separate(Pedigree, c("Par1", "Par2"), "/") %>% 
+  select(line_name = Line_name, parent1 = Par1, parent2 = Par2) %>%
+  distinct()
+
+## Determine which parents are full-sibs
+vp_parent_summ <- vp_pedigree %>% 
+  select(-Nind) %>%
+  gather(parent, line_name, -family) %>%
+  left_join(., vp_parents_pedigree) %>%
+  group_by(family) %>%
+  do(relatedness = {
+    n_par <- n_distinct(unlist(select(., parent1, parent2)))
+    case_when(n_par == 2 ~ "full_sib",
+              n_par == 3 ~ "half_sib",
+              n_par == 4 ~ "unrelated")
+  }) %>%
+  ungroup() %>%
+  unnest()
+
+# Summarize
+table(vp_parent_summ$relatedness)
+
+## Look at the average of the predictions for each group
+vp_parent_pred_summ <- popvar_pred_toplot$realistic %>% 
+  filter(!is.na(family)) %>% 
+  mutate(family = str_c("4", family)) %>% 
+  left_join(vp_parent_summ) %>% 
+  group_by(trait, relatedness, parameter) %>% 
+  mutate(nFam = n_distinct(family)) %>%
+  summarize_at(vars(prediction, nFam), funs(mean, sd)) %>%
+  select(trait, relatedness, parameter, nFam = nFam_mean, mean = prediction_mean, sd = prediction_sd) %>%
+  ungroup()
+
+
+# Plot
+g_parent_pred_summ <- vp_parent_pred_summ %>%
+  filter(parameter == "V[G]") %>%
+  mutate(relatedness = map_chr(relatedness, ~str_split(., "_") %>% map(~paste(., collapse = " ")) %>% map_chr(str_to_title)),
+         relatedness = str_c(relatedness, " (n = ", nFam, ")")) %>%
+  ggplot(aes(x = trait, y = mean, group = relatedness, fill = relatedness)) +
+  geom_col(position = "dodge") + 
+  facet_wrap(~ parameter, ncol = 2, labeller = label_parsed) +
+  theme_acs() +
+  theme(legend.position = c(0.85, 0.85))
+
+
+
+
+
+
+## What would be the response to selection when selecting the top 30 families based on mu versus mu_sp?
+popvar_pred1 <- popvar_pred_toplot$realistic %>% 
+  spread(parameter, prediction)
+
+popvar_pred_select <- popvar_pred_toplot$realistic %>% 
+  filter(parameter != "V[G]") %>% 
+  group_by(trait, parameter) %>% 
+  top_n(n = -30, wt = prediction) %>% 
+  ungroup() %>%
+  # Combine with the other prediction data
+  left_join(., popvar_pred1, by = c("parent1", "parent2", "family", "trait")) %>%
+  select(-prediction) %>%
+  rename(selection = parameter)
+
+## Summarize
+popvar_pred_select %>% 
+  group_by(trait, selection) %>% 
+  summarize_at(vars(mu:`mu[sp]`), mean)
+
+# trait       selection    mu `V[G]` `mu[sp]`
+# 1 FHBSeverity mu         11.7 0.296      10.8
+# 2 FHBSeverity mu[sp]     11.9 0.611      10.6
+# 3 HeadingDate mu         47.6 0.223      46.9
+# 4 HeadingDate mu[sp]     47.9 0.532      46.6
+# 5 PlantHeight mu         70.5 0.0709     70.0
+# 6 PlantHeight mu[sp]     70.6 0.137      70.0
+
+
+## For each trait and selection group, plot the mu, mu_sp, and varG
+popvar_pred_select_toplot <- popvar_pred_select %>% 
+  gather(parameter, prediction, mu:`mu[sp]`) %>% 
+  mutate(parameter_type = ifelse(parameter == "V[G]", "Variance", "Mean"))
+
+g_pred_mean <- popvar_pred_select_toplot %>%
+  filter(parameter_type == "Mean") %>%
+  ggplot(aes(x = parameter, y = prediction, color = selection)) +
+  geom_boxplot() +
+  facet_grid(trait ~ parameter_type, scales = "free", space = "free_x",switch = "y") +
+  theme_acs()
+
+g_pred_var <- popvar_pred_select_toplot %>%
+  filter(parameter_type != "Mean") %>%
+  ggplot(aes(x = parameter, y = prediction, color = selection)) +
+  geom_boxplot() + 
+  facet_grid(trait ~ parameter_type, scales = "free", space = "free_x",switch = "y") +
+  theme_acs()
+
+g_pred <- plot_grid(
+  g_pred_mean + theme(legend.position = "none"), 
+  g_pred_var + theme(strip.text.y = element_blank(), axis.title.y = element_blank()), 
+  ncol = 2, rel_widths = c(1, 0.7))
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
