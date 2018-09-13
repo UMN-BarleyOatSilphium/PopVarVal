@@ -51,6 +51,8 @@ tp_analysis <- tp_prediction_tomodel %>%
   })
 
 
+
+
 ## Look at variance components and heritability
 (g_tp_prediction_h2 <- tp_analysis %>% 
   mutate(h2 = map_dbl(h2, "heritability")) %>% 
@@ -109,83 +111,130 @@ tp_prediction_BLUE <- tp_analysis %>%
 
 
 
-## Do the same thing for the relevant tp data
+# ## Do the same thing for the relevant tp data
+# 
+# ## Run models
+# tp_analysis <- tp_relevant_tomodel %>%
+#   group_by(trait) %>%
+#   do({
+#     df <- .
+#     print(unique(df$trait))
+#     summarize_pheno(data = df)
+#   })
+# 
+# 
+# ## Look at variance components and heritability
+# tp_analysis %>% select(trait, h2, n_e) %>% mutate(h2 = map_dbl(h2, "heritability"))
+# 
+# # trait          h2   n_e
+# # 1 FHBSeverity 0.446     4
+# # 2 HeadingDate 0.972    10
+# # 3 PlantHeight 0.746     9
+# 
+# (g_tp_relevant_h2 <- tp_analysis %>% 
+#     mutate(h2 = map_dbl(h2, "heritability")) %>% 
+#     qplot(x = trait, y = h2, geom = "col", fill = "blue", data = .) +
+#     geom_text(aes(label = str_c("Envs: ", n_e)), vjust = 2) +
+#     geom_text(aes(label = str_c("h2: ", round(h2, 3))), vjust = 4) + 
+#     scale_fill_discrete(guide = FALSE))
+# 
+# ggsave(filename = "tp_relevant_h2.jpg", plot = g_tp_relevant_h2, path = fig_dir, height = 5, width = 5, dpi = 1000)
+# 
+# tp_var_prop <- tp_analysis %>% 
+#   mutate(varcomp = map(h2, "var_comp")) %>%
+#   unnest(varcomp) %>% 
+#   group_by(trait) %>% 
+#   mutate(var_prop = variance / sum(variance)) 
+# 
+# # trait         n_e source                   variance    var_prop
+# # 1 FHBSeverity     4 line_name:environment 49.2        0.825      
+# # 2 FHBSeverity     4 line_name             10.4        0.175      
+# # 3 FHBSeverity     4 Residual               0.00456    0.0000764  
+# # 4 HeadingDate    10 line_name:environment  2.98       0.222      
+# # 5 HeadingDate    10 line_name             10.4        0.778      
+# # 6 HeadingDate    10 Residual               0.00000856 0.000000638
+# # 7 PlantHeight     9 line_name:environment 22.2        0.752      
+# # 8 PlantHeight     9 line_name              7.33       0.248      
+# # 9 PlantHeight     9 Residual               0.000507   0.0000172
+# 
+# 
+# g_tp_relevant_varprop <- tp_var_prop %>% 
+#   ggplot(aes(x = trait, y = var_prop, fill = source)) + 
+#   geom_col(position = "dodge")
+# 
+# ggsave(filename = "tp_relevant_varprop.jpg", plot = g_tp_relevant_varprop, path = fig_dir, height = 5, width = 5, dpi = 1000)
+# 
+# 
+# 
+# tp_analysis %>%
+#   unnest(sig_test)  %>%
+#   mutate(annotate = case_when(p_value <= 0.01 ~ "***", p_value <= 0.05 ~ "**", p_value <= 0.1 ~ "*", TRUE ~ ""))
+# 
+# ## G and GxE are significant for all traits, though more so for FHB severity.
+# 
+# # trait         n_e term     df statistic   p_value annotate
+# # 1 FHBSeverity     4 g         1      26.5 2.59e-  7 ***     
+# # 2 FHBSeverity     4 ge        1      75.8 3.13e- 18 ***     
+# # 3 HeadingDate    10 g         1    2066.  0.        ***     
+# # 4 HeadingDate    10 ge        1     553.  3.27e-122 ***     
+# # 5 PlantHeight     9 g         1     215.  1.30e- 48 ***     
+# # 6 PlantHeight     9 ge        1     538.  5.42e-119 *** 
+# 
+# 
+# 
+# # Unnest the blues
+# tp_relevant_BLUE <- tp_analysis %>%
+#   unnest(BLUE) %>%
+#   ungroup() %>%
+#   select(-n_e)
 
-## Run models
-tp_analysis <- tp_relevant_tomodel %>%
-  group_by(trait) %>%
-  do({
-    df <- .
-    print(unique(df$trait))
-    summarize_pheno(data = df)
-  })
-
-
-## Look at variance components and heritability
-tp_analysis %>% select(trait, h2, n_e) %>% mutate(h2 = map_dbl(h2, "heritability"))
-
-# trait          h2   n_e
-# 1 FHBSeverity 0.446     4
-# 2 HeadingDate 0.972    10
-# 3 PlantHeight 0.746     9
-
-(g_tp_relevant_h2 <- tp_analysis %>% 
-    mutate(h2 = map_dbl(h2, "heritability")) %>% 
-    qplot(x = trait, y = h2, geom = "col", fill = "blue", data = .) +
-    geom_text(aes(label = str_c("Envs: ", n_e)), vjust = 2) +
-    geom_text(aes(label = str_c("h2: ", round(h2, 3))), vjust = 4) + 
-    scale_fill_discrete(guide = FALSE))
-
-ggsave(filename = "tp_relevant_h2.jpg", plot = g_tp_relevant_h2, path = fig_dir, height = 5, width = 5, dpi = 1000)
-
-tp_var_prop <- tp_analysis %>% 
-  mutate(varcomp = map(h2, "var_comp")) %>%
-  unnest(varcomp) %>% 
-  group_by(trait) %>% 
-  mutate(var_prop = variance / sum(variance)) 
-
-# trait         n_e source                   variance    var_prop
-# 1 FHBSeverity     4 line_name:environment 49.2        0.825      
-# 2 FHBSeverity     4 line_name             10.4        0.175      
-# 3 FHBSeverity     4 Residual               0.00456    0.0000764  
-# 4 HeadingDate    10 line_name:environment  2.98       0.222      
-# 5 HeadingDate    10 line_name             10.4        0.778      
-# 6 HeadingDate    10 Residual               0.00000856 0.000000638
-# 7 PlantHeight     9 line_name:environment 22.2        0.752      
-# 8 PlantHeight     9 line_name              7.33       0.248      
-# 9 PlantHeight     9 Residual               0.000507   0.0000172
-
-
-g_tp_relevant_varprop <- tp_var_prop %>% 
-  ggplot(aes(x = trait, y = var_prop, fill = source)) + 
-  geom_col(position = "dodge")
-
-ggsave(filename = "tp_relevant_varprop.jpg", plot = g_tp_relevant_varprop, path = fig_dir, height = 5, width = 5, dpi = 1000)
 
 
 
-tp_analysis %>%
-  unnest(sig_test)  %>%
-  mutate(annotate = case_when(p_value <= 0.01 ~ "***", p_value <= 0.05 ~ "**", p_value <= 0.1 ~ "*", TRUE ~ ""))
+### Explore FHB severity
 
-## G and GxE are significant for all traits, though more so for FHB severity.
+## First fit GxYxL models
+tp_FHB_tomodel <- tp_prediction_tomodel %>%
+  filter(trait == "FHBSeverity")
+  
+control <- lmerControl(check.nobs.vs.nlev = "ignore", check.nobs.vs.nRE = "ignore")
+wts <- tp_FHB_tomodel$std.error^2
 
-# trait         n_e term     df statistic   p_value annotate
-# 1 FHBSeverity     4 g         1      26.5 2.59e-  7 ***     
-# 2 FHBSeverity     4 ge        1      75.8 3.13e- 18 ***     
-# 3 HeadingDate    10 g         1    2066.  0.        ***     
-# 4 HeadingDate    10 ge        1     553.  3.27e-122 ***     
-# 5 PlantHeight     9 g         1     215.  1.30e- 48 ***     
-# 6 PlantHeight     9 ge        1     538.  5.42e-119 *** 
+# Vector of random effects
+randos <- c("(1|line_name)", "(1|location)", "(1|year)", "(1|line_name:location)", "(1|line_name:year)", "(1|line_name:location:year)")
+
+# Full model
+full <- as.formula(paste("value ~ ", paste(randos, collapse = "+")))
+# Drop1
+dropped <- set_names(randos, randos) %>%
+  map(~setdiff(randos, .)) %>%
+  map(~paste(., collapse = "+")) %>%
+  map(~as.formula(paste("value ~ ", paste(., collapse = "+")), env = .GlobalEnv))
+
+forms <- c(full, dropped)
+
+## Fit the models
+fits <- modelr::fit_with(data = tp_FHB_tomodel, .f = lmer, .formulas = forms, control = control, weights = wts)
+ 
+## Compare these reduced models to the full model and perform a LRT
+lrt_out <- map(fits[-1], ~lr_test(model1 = fits[[1]], model2 = .)) %>% 
+  list(., names(.)) %>% 
+  pmap_df(~mutate(.x, term = .y) %>% select(term, names(.))) %>%
+  mutate(p_value = formatC(p_value, digits = 2, format = "g")) %>%
+  as_data_frame()
+
+# term                        full_model    df    statistic p_value
+# 1 (1|line_name)               model1         1   9.13       0.0025 
+# 2 (1|location)                model1         1  15.8        7.1e-05
+# 3 (1|year)                    model1         1   2.94       0.087  
+# 4 (1|line_name:location)      model1         1   0.844      0.36   
+# 5 (1|line_name:year)          model1         1  -0.00000833 "  1"  
+# 6 (1|line_name:location:year) model1         1  59.2        1.4e-14
 
 
-
-# Unnest the blues
-tp_relevant_BLUE <- tp_analysis %>%
-  unnest(BLUE) %>%
-  ungroup() %>%
-  select(-n_e)
-
+## Genotype, location, and GxYxL are all significant.
+## The significance of location and the non-significance of year suggest that something
+## about the location is driving changes, and this very well may be management.
 
 
 
@@ -252,6 +301,15 @@ tp_prediction_BLUE_FHB <- tp_analysis_FHB %>%
   unnest(BLUE) %>%
   ungroup() %>%
   select(-n_e)
+
+## Heritability
+tp_analysis_FHB %>% 
+  group_by(location) %>% 
+  summarize(h2 = map_dbl(h2, "heritability"))
+
+# location    h2
+# 1 CRM      0.464
+# 2 STP      0.189
 
 
 
