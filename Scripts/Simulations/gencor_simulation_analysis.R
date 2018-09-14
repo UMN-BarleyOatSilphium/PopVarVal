@@ -14,6 +14,11 @@ library(cowplot)
 # Significance level
 alpha <- 0.05
 
+
+
+
+
+
 # Load the simulation results
 load(file.path(result_dir, "popvar_gencor_simulation_results.RData"))
 
@@ -154,6 +159,12 @@ ggsave(filename = "gen_cor_simulation_bias.jpg", plot = g_bias, path = fig_dir,
 
 
 
+
+
+
+
+
+
 ### Genetic correlation genetic architecture simulation
 # Load the simulation results
 load(file.path(result_dir, "popvar_gencor_space_simulation_results.RData"))
@@ -200,6 +211,11 @@ plot(effects::allEffects(fit))
 
 
 
+
+
+
+
+
 ### Genetic correlation selection simulation
 
 
@@ -215,151 +231,157 @@ popvar_selection_sim_tidy <- popvar_simulation_out %>%
 
 ## Unnest the correlations
 correlations_tidy <- popvar_selection_sim_tidy %>%
-  unnest(correlations)
+  unnest(correlations) %>%
+  rename(base_corG = corG)
 
 response_tidy <- popvar_selection_sim_tidy %>%
   unnest(response) %>%
-  left_join(., filter(correlations_tidy, type == "tp_select_cor"), by = c("trait1_h2", "trait2_h2", "gencor", "arch", "iter")) %>%
-  mutate(delta_corG = corG.x - corG.y,
-         relative_delta_corG = corG.x - corG_mean) %>%
-  select(-corG.x, -corG.y) %>%
-  mutate_at(vars(trait1_h2, trait2_h2, gencor, arch, trait, selection), as.factor)
-
+  left_join(., filter(correlations_tidy, type == "tp_base_cor"), by = c("trait1_h2", "trait2_h2", "gencor", "arch", "iter")) %>%
+  mutate(delta_corG = corG - base_corG) %>%
+  # Sum the responses to selection for both traits as an index
+  group_by(trait1_h2, trait2_h2, gencor, arch, iter, intensity, selection) %>%
+  mutate_at(vars(relative_response, stand_response), funs(index = sum)) %>%
+  ungroup()
+ 
 
 n_iter <- n_distinct(response_tidy$iter)
 
 
+
+
+
 ## Summarize the response results
 response_summary <- response_tidy %>%
-  select(-mean_gv, -corG_mean, -mean_gv_mean, -par_mean_gv, -base_sdG, -type) %>%
-  gather(variable, value, stand_response, relative_response, delta_corG, relative_delta_corG) %>%
-  group_by(trait1_h2, trait2_h2, gencor, arch, trait, selection, variable) %>%
+  select(trait1_h2:trait, contains("response"), contains("index"), delta_corG) %>%
+  gather(variable, value, contains("response"), contains("index"), delta_corG) %>%
+  # Change the trait name to "trait" for the indices and the correlation
+  mutate(trait = ifelse(variable %in% c("relative_response_index", "stand_response_index", "delta_corG"), "trait", trait)) %>%
+  distinct(trait1_h2, trait2_h2, gencor, arch, iter, intensity, selection, trait, variable, value) %>%
+  mutate_at(vars(trait1_h2, trait2_h2, gencor), as.factor) %>%
+  group_by(trait1_h2, trait2_h2, gencor, arch, trait, intensity, selection, variable) %>%
   summarize_at(vars(value), funs(mean, sd)) %>%
   ungroup() %>%
   mutate(stat = qt(p = 1 - (alpha / 2), df = n_iter - 1) * (sd / sqrt(n_iter) ),
          lower = mean - stat, upper = mean + stat)
     
 
-  
-# Plot the response to selection - relative to the base population
-response_summary %>%
-  filter(variable == "stand_response") %>%
-  mutate(gencor = parse_number(gencor)) %>%
-  ggplot(aes(x = gencor, y = mean, shape = selection, color = trait)) +
-  geom_hline(yintercept = 1, lty = 2) +
-  geom_point() +
-  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.1) +
-  facet_grid(trait1_h2 + trait2_h2 ~ arch) +
+### Plotting 
+
+
+## Response to selection of the index - relative to base population
+g_stand_resp <- response_summary %>%
+  filter(variable == "stand_response_index") %>%
+  # filter(gencor == 0.75) %>%
+  ggplot(aes(x = intensity, y = mean, shape = selection, fill = selection)) +
+  geom_point(size = 1) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.2) +
+  ylab("Standardized response (relative to base population)") +
+  xlab("Proportion of selected individuals") +
+  facet_grid(trait1_h2 + trait2_h2 ~ arch + gencor, 
+             labeller = labeller(arch = label_value, .default = label_both)) +
   theme_acs()
 
-# Response relative to selection on the mean
-response_summary %>%
-  filter(selection != "mean", variable == "relative_response") %>%
-  mutate(gencor = parse_number(gencor)) %>%
-  ggplot(aes(x = gencor, y = mean, shape = selection, color = trait)) +
-  geom_hline(yintercept = 0, lty = 2) +
-  geom_point() +
-  geom_line() +
-  facet_grid(trait1_h2 + trait2_h2 ~ arch) +
+# Save
+ggsave(filename = "gencor_sim_stand_response.jpg", plot = g_stand_resp, path = fig_dir,
+       height = 6, width = 14, dpi = 1000)
+
+## Take a subset
+g_stand_resp_sub <- response_summary %>%
+  filter(variable == "stand_response_index") %>%
+  filter(trait1_h2 == 0.8, gencor %in% c(-0.75, 0.75)) %>%
+  ggplot(aes(x = intensity, y = mean, shape = selection, fill = selection)) +
+  geom_point(size = 1) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.2) +
+  ylab("Standardized response (relative to base population)") +
+  xlab("Proportion of selected individuals") +
+  facet_grid(trait1_h2 + trait2_h2 ~ arch + gencor, 
+             labeller = labeller(arch = label_value, .default = label_both)) +
   theme_acs()
+
+# Save
+ggsave(filename = "gencor_sim_stand_response_subset.jpg", plot = g_stand_resp_sub, path = fig_dir,
+       height = 5, width = 8, dpi = 1000)
+
+
+# Response relative to selection on the mean
+g_relative_resp <- response_summary %>%
+  filter(variable == "relative_response_index") %>%
+  ggplot(aes(x = intensity, y = mean, shape = selection, fill = selection)) +
+  geom_point(size = 1) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.2) +
+  ylab("Standardized response (relative to mean selection)") +
+  xlab("Proportion of selected individuals") +
+  facet_grid(trait1_h2 + trait2_h2 ~ arch + gencor, 
+             labeller = labeller(arch = label_value, .default = label_both)) +
+  theme_acs()
+
+# Save
+ggsave(filename = "gencor_sim_relative_response.jpg", plot = g_relative_resp, path = fig_dir,
+       height = 6, width = 14, dpi = 1000)
+
+# Response relative to selection on the mean - subset
+g_relative_resp_sub <- response_summary %>%
+  filter(variable == "relative_response_index") %>%
+  filter(trait1_h2 == 0.8, gencor %in% c(-0.75, 0.75), intensity <= 0.25) %>%
+  # filter(selection != "musp") %>%
+  ggplot(aes(x = intensity, y = mean, shape = selection, fill = selection)) +
+  geom_hline(yintercept = 0, size = 0.25) + 
+  geom_point(size = 1) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.2) +
+  ylab("Standardized response (relative to mean selection)") +
+  xlab("Proportion of selected individuals") +
+  facet_grid(trait1_h2 + trait2_h2 ~ arch + gencor, 
+             labeller = labeller(arch = label_value, .default = label_both)) +
+  theme_acs() +
+  theme(axis.text.x = element_text(size = 5))
+
+# Save
+ggsave(filename = "gencor_sim_relative_response_sub.jpg", plot = g_relative_resp_sub, path = fig_dir,
+       height = 3, width = 6, dpi = 1000)
+
+
 
 
 ## Plot the change in genetic correlation
-response_summary %>% 
-  mutate(gencor = parse_number(gencor)) %>%
-  filter(trait == "trait1", variable == "delta_corG") %>%
-  ggplot(aes(x = gencor, y = mean, shape = selection, color = selection)) +
-  geom_hline(yintercept = 0, lty = 2) +
-  geom_point() +
-  facet_grid(trait1_h2 + trait2_h2 ~ arch) +
-  theme_acs()
+g_delta_corG <- response_summary %>%
+  filter(variable == "delta_corG") %>%
+  ggplot(aes(x = intensity, y = mean, shape = selection, fill = selection)) +
+  geom_point(size = 1) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.2) +
+  ylab("Change in genetic correlation (relative to base population)") +
+  xlab("Proportion of selected individuals") +
+  facet_grid(trait1_h2 + trait2_h2 ~ arch + gencor, 
+             labeller = labeller(arch = label_value, .default = label_both)) +
+  theme_acs()  +
+  theme(axis.text.x = element_text(size = 5))
 
-# Relative change in genetic correlation
-response_summary %>% 
-  mutate(gencor = parse_number(gencor)) %>%
-  filter(trait == "trait1", selection != "mean") %>%
-  ggplot(aes(x = gencor, y = mean, shape = selection, color = selection)) +
-  geom_hline(yintercept = 0, lty = 2) +
-  geom_point() +
-  facet_grid(trait1_h2 + trait2_h2 ~ arch) +
-  theme_acs()
+# Save
+ggsave(filename = "gencor_sim_delta_corG.jpg", plot = g_delta_corG, path = fig_dir,
+       height = 6, width = 14, dpi = 1000)
 
 
+## Plot the change in genetic correlation - subset
+g_delta_corG_sub <- response_summary %>%
+  filter(variable == "delta_corG") %>%
+  filter(trait1_h2 == 0.8, gencor %in% c(-0.75, 0.75), intensity <= 0.25) %>%
+  ggplot(aes(x = intensity, y = mean, shape = selection, fill = selection)) +
+  geom_point(size = 1) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.2) +
+  ylab("Change in genetic correlation (relative to base population)") +
+  xlab("Proportion of selected individuals") +
+  facet_grid(trait1_h2 + trait2_h2 ~ arch + gencor, 
+             labeller = labeller(arch = label_value, .default = label_both)) +
+  theme_acs()  +
+  theme(axis.text.x = element_text(size = 5))
 
-## Create an index of response over traits
-response_summary_index <- response_summary %>% 
-  group_by(trait1_h2, trait2_h2, gencor, arch, selection) %>% 
-  summarize_at(vars(stand_response_mean, relative_response_mean), mean) %>%
-  # mutate(gencor = parse_number(gencor)) %>%
-  ungroup()
- 
-
-
-# Plot the response to selection - relative to the base population
-response_summary_index %>%
-  ggplot(aes(x = gencor, y = stand_response_mean, shape = selection, color = selection)) +
-  geom_hline(yintercept = 1, lty = 2) +
-  geom_point() +
-  geom_line() +
-  facet_grid(trait1_h2 + trait2_h2 ~ arch) +
-  theme_acs()
-
-# Response relative to selection on the mean
-response_summary_index %>%
-  filter(!selection %in% c("mean", "rand")) %>%
-  ggplot(aes(x = gencor, y = relative_response_mean, shape = selection, color = selection)) +
-  geom_hline(yintercept = 0, lty = 2) +
-  geom_point() +
-  # geom_line() +
-  facet_grid(trait1_h2 + trait2_h2 ~ arch) +
-  theme_acs()
-
-
-# Plot
-response_summary_index %>%
-  filter(selection != "mean") %>%
-  ggplot(aes(x = gencor, y = index_response_mean, shape = selection, color = selection)) +
-  geom_hline(yintercept = 0, lty = 2) +
-  geom_point() +
-  facet_grid(trait1_h2 + trait2_h2 ~ arch) +
-  theme_acs()
-
-response_tomodel <- response_tidy %>%
-  mutate(selection = factor(selection, levels = c("mean", "corG", "musp", "rand")))
-
-## Fit a model - trait2 response
-fit <- lm(stand_response ~ trait1_h2 + trait2_h2 + gencor + arch + selection, data = response_tomodel,
-          subset = trait == "trait2")
-
-anova(fit)
-
-## Effects plot
-plot(effects::allEffects(fit))
+# Save
+ggsave(filename = "gencor_sim_delta_corG_sub.jpg", plot = g_delta_corG_sub, path = fig_dir,
+       height = 3, width = 6, dpi = 1000)
 
 
 
-# Plot the genetic correlation
-response_summary %>%
-  filter(trait == "trait1") %>%
-  ggplot(aes(x = selection, y = delta_corG_mean, shape = selection)) +
-  geom_point() +
-  facet_grid(trait1_h2 + trait2_h2 ~ gencor + arch) +
-  theme_acs() +
-  theme(axis.text.x = element_blank())
 
-## Fit a model - change in correlation relative to selecting on the mean
-fit_corG <- lm(delta_corG ~ trait1_h2 + trait2_h2 + gencor + arch + selection, data = response_tomodel,
-               subset = trait == "trait1")
 
-anova(fit_corG)
-
-## Effects plot
-plot(effects::allEffects(fit_corG))
-
-fit_corG2 <- lm(delta_corG ~ trait1_h2 + trait2_h2 + selection:gencor + arch, data = response_tomodel,
-                subset = trait == "trait1")
-
-plot(effects::allEffects(fit_corG2))
 
 
 
