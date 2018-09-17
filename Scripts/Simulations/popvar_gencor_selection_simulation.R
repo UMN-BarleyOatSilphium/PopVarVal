@@ -27,6 +27,11 @@ load(file.path(geno_dir, "s2_cap_simulation_data.RData"))
 # load(file.path(gdrive_dir, "BarleyLab/Projects/SideProjects/Resources/s2_cap_simulation_data.RData"))
 
 
+# Remove monomorphic SNPs
+s2_cap_genos <- s2_cap_genos[,!colMeans(s2_cap_genos) %in% c(0, 2)]
+s2_snp_info <- subset(s2_snp_info, rs %in% colnames(s2_cap_genos))
+
+
 
 # Number of cores
 n_cores <- 8 # Local machine
@@ -103,6 +108,11 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
     qtl_model <- replicate(n = 2, matrix(NA, ncol = 4, nrow = L), simplify = FALSE)
     genome1 <- sim_multi_gen_model(genome = genome, qtl.model = qtl_model, add.dist = "geometric", max.qtl = L,
                                    corr = gencor, prob.corr = probcor)
+    
+    ## Adjust the genetic architecture - only if pleiotropy is not present
+    if (probcor[1] != 0) {
+      genome1 <- adj_multi_gen_model(genome = genome1, geno = s2_cap_genos, gencor = gencor)
+    }
 
     ## Create the TP
     # Sample from the genotypes

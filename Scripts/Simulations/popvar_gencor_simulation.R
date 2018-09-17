@@ -27,6 +27,13 @@ load(file.path(geno_dir, "s2_cap_simulation_data.RData"))
 # load(file.path(gdrive_dir, "BarleyLab/Projects/SideProjects/Resources/s2_cap_simulation_data.RData"))
 
 
+# Remove monomorphic SNPs
+s2_cap_genos <- s2_cap_genos[,!colMeans(s2_cap_genos) %in% c(0, 2)]
+s2_snp_info <- subset(s2_snp_info, rs %in% colnames(s2_cap_genos))
+
+
+
+
 
 # Number cores
 n_cores <- 8 # Local machine for demo
@@ -97,6 +104,13 @@ n_cores <- detectCores()
 #     qtl_model <- replicate(n = 2, matrix(NA, ncol = 4, nrow = L), simplify = FALSE)
 #     genome1 <- sim_multi_gen_model(genome = genome, qtl.model = qtl_model, add.dist = "geometric", max.qtl = maxL,
 #                                    corr = gencor, prob.corr = cbind(0, 1))
+#                                    
+#    ## Adjust the genetic architecture - only if pleiotropy is not present
+#    if (probcor[1] != 0) {
+#      genome1 <- adj_multi_gen_model(genome = genome1, geno = s2_cap_genos, gencor = gencor)
+#    }
+#
+#
 # 
 #     ## Create the TP
 #     # Sample from the genotypes
@@ -119,7 +133,7 @@ n_cores <- detectCores()
 #     crossing_block <- sim_crossing_block(parents = indnames(tp_select), n.crosses = 40)
 #     # Pedigree to accompany the crosses
 #     ped <- sim_pedigree(n.ind = 25, n.selfgen = Inf)
-#     
+# 
 #     # Make theses crosses
 #     par_pop <- sim_family_cb(genome = genome1, pedigree = ped, founder.pop = tp_select, crossing.block = crossing_block)
 #     #####
@@ -131,11 +145,11 @@ n_cores <- detectCores()
 # 
 # 
 #     ## Predict genetic variance and correlation
-#     pred_out <- pred_genvar(genome = genome1, pedigree = ped, training.pop = tp1, founder.pop = par_pop, 
+#     pred_out <- pred_genvar(genome = genome1, pedigree = ped, training.pop = tp1, founder.pop = par_pop,
 #                             crossing.block = crossing_block) %>%
 #       mutate(pred_musp = pred_mu + (k_sp * sqrt(pred_varG)))
-#     
-#     
+# 
+# 
 # 
 #     # ## Check the predictions of correlation versus PopVar
 #     # # Convert items for PopVar
@@ -317,14 +331,20 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
     gencor <- core_df$gencor[i]
     probcor <- core_df$probor[[i]]
     
+    
     # Simulate QTL
     qtl_model <- replicate(n = 2, matrix(NA, ncol = 4, nrow = L), simplify = FALSE)
     genome1 <- sim_multi_gen_model(genome = genome, qtl.model = qtl_model, add.dist = "geometric", max.qtl = maxL,
                                    corr = gencor, prob.corr = probcor)
+  
+    ## Adjust the genetic architecture - only if pleiotropy is not present
+    if (all(probcor[,1] == 0)) {
+      genome1 <- adj_multi_gen_model(genome = genome1, geno = s2_cap_genos, gencor = gencor)
+    }
     
-    ## Create the TP
     # Sample from the genotypes
     sample_genos <- s2_cap_genos[sort(sample(nrow(s2_cap_genos), size = tp_size)),]
+    ## Create the TP
     tp <- create_pop(genome = genome1, geno = sample_genos, ignore.gen.model = FALSE)
     # Measure the genetic correlation in the TP
     tp_cor <- cor(tp$geno_val[,-1])[1,2]
