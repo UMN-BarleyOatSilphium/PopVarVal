@@ -173,31 +173,90 @@ load(file.path(result_dir, "popvar_gencor_space_simulation_results.RData"))
 sim_results_tidy <- popvar_corG_space_simulation_out %>%
   rename(probcor = probor) %>%
   mutate(probcor = map(probcor, ~as.data.frame(.) %>% `names<-`(., c("dLinkage", "pLinkage")) %>% tail(., 1))) %>% # The tail is used to remove the probabilities of pleiotropy
-  unnest(probcor)
+  unnest(probcor) %>%
+  ## Extract the results
+  mutate(predictions = map(results, "summary"),
+         correlations = map(results, "other")) %>%
+  select(-results) %>%
+  mutate_at(vars(trait1_h2:gencor, dLinkage, pLinkage), as.factor)
+  
+
+
+## Extract the training population genetic correlation
+base_cor_summ <- sim_results_tidy %>%
+  unnest(correlations) %>%
+  group_by(trait1_h2, trait2_h2, nQTL, tp_size, gencor, dLinkage, pLinkage, variable) %>%
+  summarize_at(vars(value), funs(mean, sd)) %>%
+  ## Fill-in missing combinations when dLinkage == 0
+  bind_rows(., 
+            filter(., dLinkage == 0) %>%
+            group_by(variable, add = T) %>% 
+            complete(trait1_h2, trait2_h2, nQTL, tp_size, gencor, pLinkage, variable) %>%
+            group_by(trait1_h2, trait2_h2, nQTL, tp_size, gencor, variable) %>% 
+            mutate_at(vars(mean, sd), funs(mean), na.rm = T) %>%
+            ungroup() %>%
+            distinct(trait1_h2, trait2_h2, nQTL, tp_size, gencor, pLinkage, dLinkage, variable, mean, sd) %>%
+            filter(pLinkage != 1)
+  ) %>% ungroup()
+
+
+
+
+
+## Plot
+g_base_cor <- base_cor_summ %>%
+  filter(variable == "tp_gencor") %>%
+  ggplot(aes(x = pLinkage, y = dLinkage, fill = mean)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "blue", high = "red") +
+  facet_wrap(~ gencor, nrow = 1) +
+  theme_acs()
+
+# save
+ggsave(filename = "gencor_arch_space_base_corG.jpg", plot = g_base_cor, path = fig_dir,
+       height = 3, width = 6, dpi = 1000)
+
+
+
   
 ## Extract the prediction results
-sim_pred_results <- sim_results_tidy %>%
-  mutate(predictions = map(results, "summary")) %>% 
-  unnest(predictions) %>%
-  mutate_at(vars(trait1_h2:gencor, dLinkage, pLinkage), as.factor)
-
 # Summarize
-sim_pred_summ <- sim_pred_results %>%
-  group_by(trait1_h2, trait2_h2, nQTL, tp_size, gencor, dLinkage, pLinkage, trait, parameter) %>%
-  mutate(n = n()) %>%
-  summarize_at(vars(accuracy, bias, n), funs(mean, sd)) %>%
-  select(-n_sd) %>%
+pred_results_summ <- sim_results_tidy %>%
+  unnest(predictions) %>%
+  gather(variable, value, accuracy, bias) %>%
+  filter(!(variable == "bias" & abs(value) > 2)) %>%
+  group_by(trait1_h2, trait2_h2, nQTL, tp_size, gencor, dLinkage, pLinkage, trait, parameter, variable) %>%
+  summarize_at(vars(value), funs(mean, sd, n())) %>%
   ungroup()
 
 
 ## Plot results for genetic correlation
-sim_pred_summ %>%
-  filter(dLinkage != 0, parameter == "corG") %>%
-  ggplot(aes(x = pLinkage, y = dLinkage, fill = accuracy_mean)) +
+g_pred_acc_corG <- pred_results_summ %>%
+  filter(dLinkage != 0, parameter == "corG", variable == "accuracy") %>%
+  ggplot(aes(x = pLinkage, y = dLinkage, fill = mean)) +
   geom_tile() +
-  scale_fill_gradient2(low = "blue", high = "red") +
-  facet_wrap(~ gencor, ncol = 2) +
+  scale_fill_gradient(low = "white", high = "green") +
+  facet_grid(~ gencor) +
   theme_acs()
+
+
+# bias
+g_pred_bias_corG <- pred_results_summ %>%
+  filter(dLinkage != 0, parameter == "corG", variable == "bias") %>%
+  ggplot(aes(x = pLinkage, y = dLinkage, fill = mean)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "red", high = "blue") +
+  facet_grid(~ gencor) +
+  theme_acs()
+
+# Combine
+g_pred_corG <- plot_grid(g_pred_acc_corG, g_pred_bias_corG, ncol = 1, align = "hv")
+ggsave(filename = "gencor_arch_space_pred.jpg", plot = g_pred_corG, path = fig_dir, width = 6, height = 5, dpi = 1000)
+
+
+
+
+
 
 
 ## Fit a model
@@ -222,8 +281,19 @@ plot(effects::allEffects(fit))
 # Load the simulation results
 load(file.path(result_dir, "popvar_gencor_selection_simulation_results.RData"))
 
+## Are there any missing trials?
+popvar_gencor_selection_simulation_out %>%
+  distinct(trait1_h2, trait2_h2, gencor, arch, iter) %>%
+  mutate_all(as.factor) %>% 
+  mutate(obs = T) %>% 
+  complete(trait1_h2, trait2_h2, gencor, arch, iter, fill = list(obs = F)) %>% 
+  filter(!obs) %>%
+  nrow()
+
+
+
 # Tidy
-popvar_selection_sim_tidy <- popvar_simulation_out %>% 
+popvar_selection_sim_tidy <- popvar_gencor_selection_simulation_out %>% 
   mutate(response = map(results, "response"), 
          common_cross = map(results, "common_cross"),
          correlations = map(results, "correlations")) %>% 
@@ -236,32 +306,44 @@ correlations_tidy <- popvar_selection_sim_tidy %>%
 
 response_tidy <- popvar_selection_sim_tidy %>%
   unnest(response) %>%
-  left_join(., filter(correlations_tidy, type == "tp_base_cor"), by = c("trait1_h2", "trait2_h2", "gencor", "arch", "iter")) %>%
-  mutate(delta_corG = corG - base_corG) %>%
+  left_join(., filter(correlations_tidy, type != "tp_select_cor"), by = c("trait1_h2", "trait2_h2", "gencor", "arch", "iter")) %>%
+  mutate(delta_corG = corG - base_corG,
+         intensity = round(intensity, 2)) %>%
   # Sum the responses to selection for both traits as an index
   group_by(trait1_h2, trait2_h2, gencor, arch, iter, intensity, selection) %>%
   mutate_at(vars(relative_response, stand_response), funs(index = sum)) %>%
   ungroup()
  
 
-n_iter <- n_distinct(response_tidy$iter)
+## Plot the genetic correlation in the TP
+correlations_tidy %>% 
+  filter(type == "tp_base_cor", trait1_h2 == 1, trait2_h2 == 1) %>% 
+  ggplot(aes(x = base_corG, fill = as.factor(gencor))) + 
+  geom_density() + 
+  facet_grid( ~ arch) +
+  theme_acs()
 
+## We have a problem with the close linkage and loose linkage groups.
 
 
 
 
 ## Summarize the response results
-response_summary <- response_tidy %>%
+response_tomodel <- response_tidy %>%
   select(trait1_h2:trait, contains("response"), contains("index"), delta_corG) %>%
   gather(variable, value, contains("response"), contains("index"), delta_corG) %>%
   # Change the trait name to "trait" for the indices and the correlation
   mutate(trait = ifelse(variable %in% c("relative_response_index", "stand_response_index", "delta_corG"), "trait", trait)) %>%
   distinct(trait1_h2, trait2_h2, gencor, arch, iter, intensity, selection, trait, variable, value) %>%
-  mutate_at(vars(trait1_h2, trait2_h2, gencor), as.factor) %>%
+  mutate_at(vars(trait1_h2, trait2_h2, gencor), as.factor)
+  
+  
+## Summarize over iterations
+response_summary <- response_tomodel %>% 
   group_by(trait1_h2, trait2_h2, gencor, arch, trait, intensity, selection, variable) %>%
-  summarize_at(vars(value), funs(mean, sd)) %>%
+  summarize_at(vars(value), funs(mean, sd, n())) %>%
   ungroup() %>%
-  mutate(stat = qt(p = 1 - (alpha / 2), df = n_iter - 1) * (sd / sqrt(n_iter) ),
+  mutate(stat = qt(p = 1 - (alpha / 2), df = n - 1) * (sd / sqrt(n) ),
          lower = mean - stat, upper = mean + stat)
     
 
@@ -288,7 +370,7 @@ ggsave(filename = "gencor_sim_stand_response.jpg", plot = g_stand_resp, path = f
 ## Take a subset
 g_stand_resp_sub <- response_summary %>%
   filter(variable == "stand_response_index") %>%
-  filter(trait1_h2 == 0.8, gencor %in% c(-0.75, 0.75)) %>%
+  filter(trait1_h2 == 1, gencor %in% c(-0.75, 0.75)) %>%
   ggplot(aes(x = intensity, y = mean, shape = selection, fill = selection)) +
   geom_point(size = 1) +
   geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.2) +
@@ -303,7 +385,24 @@ ggsave(filename = "gencor_sim_stand_response_subset.jpg", plot = g_stand_resp_su
        height = 5, width = 8, dpi = 1000)
 
 
-# Response relative to selection on the mean
+## Model
+fit_resp <- response_tomodel %>% 
+  filter(variable == "stand_response_index", intensity %in% c(0.01)) %>%
+  mutate_if(is.character, as.factor) %>%
+  mutate(intensity = as.factor(intensity)) %>%
+  lm(value ~ trait1_h2 + trait2_h2 + gencor + arch + selection + gencor:arch, data = .)
+
+anova(fit_resp)
+plot(effects::allEffects(fit_resp))
+
+## Notes:
+## 1. There is a strong interaction between architecture and intended genetic correlation, where pleiotropic architecture
+## is highly influenced by the genetic correlation
+## 2. There is little interaction of the selection strategy with architecture or intended genetic correlation
+
+
+
+# Response to selection relative to that based on the mean
 g_relative_resp <- response_summary %>%
   filter(variable == "relative_response_index") %>%
   ggplot(aes(x = intensity, y = mean, shape = selection, fill = selection)) +
@@ -322,7 +421,7 @@ ggsave(filename = "gencor_sim_relative_response.jpg", plot = g_relative_resp, pa
 # Response relative to selection on the mean - subset
 g_relative_resp_sub <- response_summary %>%
   filter(variable == "relative_response_index") %>%
-  filter(trait1_h2 == 0.8, gencor %in% c(-0.75, 0.75), intensity <= 0.25) %>%
+  filter(trait1_h2 == 1, gencor %in% c(-0.75, 0.75)) %>%
   # filter(selection != "musp") %>%
   ggplot(aes(x = intensity, y = mean, shape = selection, fill = selection)) +
   geom_hline(yintercept = 0, size = 0.25) + 
@@ -337,7 +436,23 @@ g_relative_resp_sub <- response_summary %>%
 
 # Save
 ggsave(filename = "gencor_sim_relative_response_sub.jpg", plot = g_relative_resp_sub, path = fig_dir,
-       height = 3, width = 6, dpi = 1000)
+       height = 5, width = 8, dpi = 1000)
+
+
+## Model
+fit_resp <- response_tomodel %>% 
+  filter(variable == "relative_response_index", intensity %in% c(0.01), selection %in% c("musp", "muspC")) %>%
+  mutate_if(is.character, as.factor) %>%
+  mutate(intensity = as.factor(intensity)) %>%
+  lm(value ~ trait1_h2 + trait2_h2 + gencor + arch + selection + gencor:arch, data = .)
+
+anova(fit_resp)
+plot(effects::allEffects(fit_resp))
+
+## Notes
+## 1. The advantage of selecting on musp or muspC is greater when heritability is lower
+
+
 
 
 
@@ -363,7 +478,7 @@ ggsave(filename = "gencor_sim_delta_corG.jpg", plot = g_delta_corG, path = fig_d
 ## Plot the change in genetic correlation - subset
 g_delta_corG_sub <- response_summary %>%
   filter(variable == "delta_corG") %>%
-  filter(trait1_h2 == 0.8, gencor %in% c(-0.75, 0.75), intensity <= 0.25) %>%
+  filter(trait1_h2 == 1, gencor %in% c(-0.75, 0.75)) %>%
   ggplot(aes(x = intensity, y = mean, shape = selection, fill = selection)) +
   geom_point(size = 1) +
   geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.2) +
@@ -376,11 +491,19 @@ g_delta_corG_sub <- response_summary %>%
 
 # Save
 ggsave(filename = "gencor_sim_delta_corG_sub.jpg", plot = g_delta_corG_sub, path = fig_dir,
-       height = 3, width = 6, dpi = 1000)
+       height = 5, width = 8, dpi = 1000)
 
 
 
+## Model
+fit_corG <- response_tomodel %>% 
+  filter(variable == "delta_corG", intensity %in% c(0.01)) %>%
+  mutate_if(is.character, as.factor) %>%
+  mutate(intensity = as.factor(intensity)) %>%
+  lm(value ~ trait1_h2 + trait2_h2 + gencor + arch + selection, data = .)
 
+anova(fit_corG)
+plot(effects::allEffects(fit_corG))
 
 
 
