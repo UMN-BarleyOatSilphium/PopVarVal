@@ -199,6 +199,10 @@ base_cor_summ <- sim_results_tidy %>%
             filter(pLinkage != 1)
   ) %>% ungroup()
 
+
+
+
+
 ## Plot
 g_base_cor <- base_cor_summ %>%
   filter(variable == "tp_gencor") %>%
