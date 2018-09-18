@@ -57,9 +57,8 @@ ints <- seq(0.01, 0.20, by = 0.01)
 
 
 ## Outline the parameters to perturb
-trait1_h2_list <- c(0.5, 1)
-trait2_h2_list <- c(0.5, 1)
-gencor_list <- c(-0.75, -0.25, 0.25, 0.75)
+trait1_h2_list <- trait2_h2_list <- c(0.3, 0.6, 1)
+gencor_list <- c(-0.5, 0, 0.5)
 probcor_list <- data_frame(arch = c("pleio", "close_link", "loose_link"),
                            input = list(cbind(0, 1), cbind(5, 1), cbind(30, 1) ))
 
@@ -91,6 +90,7 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
   # ## For local machine
   # i <- 1
   # core_df <- param_df_split[[i]]
+  # i <- 50
   # ##
 
   # Create a results list
@@ -114,16 +114,20 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
       genome1 <- adj_multi_gen_model(genome = genome1, geno = s2_cap_genos, gencor = gencor)
     }
 
-    ## Create the TP
-    # Sample from the genotypes
-    tp <- create_pop(genome = genome1, ignore.gen.model = FALSE, 
-                     geno = s2_cap_genos[sort(sample(nrow(s2_cap_genos), size = tp_size)),])
+    ## Create the TP by selecting on the larger base population
+    ## Hopefully this will enforce the desired genetic correlation
+    # Create the larger base population
+    tp1 <- create_pop(genome = genome1, geno = s2_cap_genos) %>% 
+      # Phenotype the base population
+      sim_phenoval(pop = ., h2 = c(trait1_h2, trait2_h2), n.env = n_env, n.rep = n_rep) %>%
+      # Select using equal weight
+      select_pop(pop = ., intensity = tp_size, index = c(1, 1), type = "phenotypic")
+    
+    # Measure the genetic variance in the tp1
+    tp1_genvar <- diag(var(tp1$geno_val[,-1]))
+    
     # Measure the genetic correlation in the TP (i.e. base population)
-    tp_cor <- cor(tp$geno_val[,-1])[1,2]
-
-
-    # Phenotype
-    tp1 <- sim_phenoval(pop = tp, h2 = c(trait1_h2, trait2_h2), n.env = n_env, n.rep = n_rep)
+    tp_cor <- cor(tp1$geno_val[,-1])[1,2]
     # Measure the phenotypic correlation in the TP
     tp_pheno_cor <- cor(tp1$pheno_val$pheno_mean[,-1])[1,2]
  
@@ -262,7 +266,7 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
       # First add the mean from the "mean" selection
       left_join(., rename(subset(response, selection == "mean", c(intensity, trait, mean)), mean_control = mean), by = c("intensity", "trait")) %>%
       # Add the genetic variance from the base population
-      left_join(., gather(sqrt(tp1$pheno_val$var_comp$V_G), trait, base_sdG), by = "trait") %>%
+      left_join(., gather(as.data.frame(t(tp1_genvar)), trait, base_sdG), by = "trait") %>%
       # Add the mean from the parent population
       left_join(., gather(summarize_at(par_pop$geno_val, vars(contains("trait")), mean), trait, par_mean), by  = "trait") %>%
       # Calculate the standardized response (mean of progeny minus mean of parents)

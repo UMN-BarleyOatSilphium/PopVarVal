@@ -125,7 +125,7 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
       select_pop(pop = ., intensity = tp_size, index = c(1, 1), type = "phenotypic")
     
     # Measure the genetic correlation in the TP
-    tp_cor <- cor(tp$geno_val[,-1])[1,2]
+    tp_cor <- cor(tp1$geno_val[,-1])[1,2]
     # Measure the phenotypic correlation in the TP
     tp_pheno_cor <- cor(tp1$pheno_val$pheno_mean[,-1])[1,2]
     par_pop <- tp1
@@ -341,7 +341,7 @@ save("popvar_simulation_out", file = save_file)
 #       select_pop(pop = ., intensity = tp_size, index = c(1, 1), type = "phenotypic")
 #     
 #     # Measure the genetic correlation in the TP
-#     tp_cor <- cor(tp$geno_val[,-1])[1,2]
+#     tp_cor <- cor(tp1$geno_val[,-1])[1,2]
 #     # Measure the phenotypic correlation in the TP
 #     tp_pheno_cor <- cor(tp1$pheno_val$pheno_mean[,-1])[1,2]
 #     par_pop <- tp1
