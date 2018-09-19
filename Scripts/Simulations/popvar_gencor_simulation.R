@@ -36,7 +36,7 @@ s2_snp_info <- subset(s2_snp_info, rs %in% colnames(s2_cap_genos))
 
 
 # Number cores
-n_cores <- 8 # Local machine for demo
+n_cores <- 16 # Local machine for demo
 n_cores <- detectCores()
 
 
@@ -87,7 +87,7 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
   # ## For local machine
   # i <- 1
   # core_df <- param_df_split[[i]]
-  # i <- 50
+  # i <- 65
   # ##
 
   # Create a results list
@@ -232,11 +232,11 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
 }, mc.cores = n_cores)
 
 # Bind and save
-popvar_simulation_out <- bind_rows(simulation_out)
+popvar_prediction_simulation_out <- bind_rows(simulation_out)
 
 # Save
 save_file <- file.path(result_dir, "popvar_gencor_simulation_prediction_results.RData")
-save("popvar_simulation_out", file = save_file)
+save("popvar_prediction_simulation_out", file = save_file)
 
 
 

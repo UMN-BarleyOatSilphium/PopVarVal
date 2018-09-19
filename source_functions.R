@@ -443,8 +443,13 @@ adj_multi_gen_model <- function(genome, geno, gencor) {
   # Grab the genetic model
   gen_model <- genome$gen_model
   
+  # Get the positions of QTL with non-zero effect
+  eff_qtl <- lapply(gen_model, function(x) which(x$add_eff != 0))
+  # Remove the QTL with non-zero effect
+  gen_model1 <- lapply(gen_model, subset, add_eff != 0, drop = FALSE)
+  
   # Get the QTL names
-  qtl_names <- lapply(gen_model, "[[", "qtl_name")
+  qtl_names <- lapply(gen_model1, "[[", "qtl_name")
   
   ## Pull the genotypes for these QTL
   qtl_geno <- pull_genotype(genome = genome, geno = geno, loci = qtlnames(genome)) - 1
@@ -453,7 +458,7 @@ adj_multi_gen_model <- function(genome, geno, gencor) {
   
   
   # Grab the qtl effects for the first trait (these will be unadulterated)
-  trait1_qtl_eff <- gen_model[[1]][,"add_eff"]
+  trait1_qtl_eff <- gen_model1[[1]][,"add_eff"]
   
   # Create a list with these effects, then randomize these effects for the second trait
   qtl_eff <- list(
@@ -467,9 +472,18 @@ adj_multi_gen_model <- function(genome, geno, gencor) {
   # Revise the effects for trait2
   qtl_eff_adj[,2] <- qtl_eff_adj[,2] %*% D
   
+  # Add these effects to gen_model1
+  gen_model1[[1]]$add_eff <- qtl_eff_adj[,1]
+  gen_model1[[2]]$add_eff <- qtl_eff_adj[,2]
+  
+  # Add this gen_model back into the genome
+  gen_model[[1]][eff_qtl[[1]],] <- gen_model1[[1]]
+  gen_model[[2]][eff_qtl[[2]],] <- gen_model1[[2]]
+  
   # Add these effects back into the genome
-  genome$gen_model[[1]]$add_eff <- qtl_eff_adj[,1]
-  genome$gen_model[[2]]$add_eff <- qtl_eff_adj[,2]
+  genome$gen_model[[1]] <- gen_model[[1]]
+  genome$gen_model[[2]] <- gen_model[[2]]
+  
   
   # Return the genome
   return(genome)
