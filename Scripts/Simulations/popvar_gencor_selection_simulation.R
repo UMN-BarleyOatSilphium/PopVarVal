@@ -27,9 +27,11 @@ load(file.path(geno_dir, "s2_cap_simulation_data.RData"))
 # load(file.path(gdrive_dir, "BarleyLab/Projects/SideProjects/Resources/s2_cap_simulation_data.RData"))
 
 
-# Remove monomorphic SNPs
+# Filter for breeding programs relevant to my data
+s2_cap_genos <- s2_cap_genos[str_detect(string = row.names(s2_cap_genos), pattern = "AB|BA|WA|N2|MT"),]
 s2_cap_genos <- s2_cap_genos[,!colMeans(s2_cap_genos) %in% c(0, 2)]
 s2_snp_info <- subset(s2_snp_info, rs %in% colnames(s2_cap_genos))
+
 
 
 
@@ -114,14 +116,10 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
       genome1 <- adj_multi_gen_model(genome = genome1, geno = s2_cap_genos, gencor = gencor)
     }
 
-    ## Create the TP by selecting on the larger base population
-    ## Hopefully this will enforce the desired genetic correlation
-    # Create the larger base population
-    tp1 <- create_pop(genome = genome1, geno = s2_cap_genos) %>% 
+    # Create the TP by random selection
+    tp1 <- create_pop(genome = genome1, geno = s2_cap_genos[sort(sample(nrow(s2_cap_genos), size = tp_size)),]) %>% 
       # Phenotype the base population
-      sim_phenoval(pop = ., h2 = c(trait1_h2, trait2_h2), n.env = n_env, n.rep = n_rep) %>%
-      # Select using equal weight
-      select_pop(pop = ., intensity = tp_size, index = c(1, 1), type = "phenotypic")
+      sim_phenoval(pop = ., h2 = c(trait1_h2, trait2_h2), n.env = n_env, n.rep = n_rep)
     
     # Measure the genetic variance in the tp1
     tp1_genvar <- diag(var(tp1$geno_val[,-1]))
