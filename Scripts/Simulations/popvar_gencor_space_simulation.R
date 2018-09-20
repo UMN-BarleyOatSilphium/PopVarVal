@@ -42,7 +42,10 @@ n_cores <- 8 # Local machine for demo
 n_cores <- detectCores()
 
 
-#### Simulation to test different genetic architectures and training population parameters
+
+
+
+#### Simulation to test different degrees of linkage and pleiotropy
 
 
 ## Fixed parameters
@@ -54,16 +57,29 @@ n_crosses <- 50
 k_sp <- 1.76
 
 ## Outline the parameters to perturb
-trait1_h2_list <- trait2_h2_list <- c(0.3, 0.6, 1)
-nQTL_list <- c(30, 100)
-tp_size_list <- seq(150, 600, by = 150)
+trait1_h2_list <- trait2_h2_list <- 0.5
+nQTL_list <- c(100)
+tp_size_list <- 300
 gencor_list <- c(-0.5, 0, 0.5)
-probcor_list <- data_frame(arch = c("pleio", "close_link", "loose_link"),
-                           input = list(cbind(0, 1), cbind(5, 1), cbind(30, 1) ))
+
+## Percentage of pleiotropy versus degree of linkage
+pPleio <- seq(0, 0.9, by = 0.1)
+dLinkage <- seq(5, 50, by = 5)
+
+probcor_list <- crossing(pPleio, dLinkage) %>%
+  add_row(pPleio = 1, dLinkage = 0) %>%
+  mutate(pLinkage = 1 - pPleio) %>%
+  pmap(~rbind(cbind(0, ..1), cbind(..2, ..3))) %>%
+  # Remove any rows with 0 probability
+  map(~.[.[,2] != 0,,drop = FALSE])
+
+
+probcor_df <- data_frame(probor = probcor_list)
+
 
 # Create a data.frame of parameters
 param_df <- crossing(trait1_h2 = trait1_h2_list, trait2_h2 = trait2_h2_list, nQTL = nQTL_list, tp_size = tp_size_list,
-                     gencor = gencor_list, probcor = probcor_list, iter = seq(n_iter))
+                     gencor = gencor_list, iter = seq(n_iter), probcor = probcor_df)
 
 map_sim <- s2_snp_info %>%
   split(.$chrom) %>%
@@ -89,7 +105,6 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
   # ## For local machine
   # i <- 1
   # core_df <- param_df_split[[i]]
-  # i <- 65
   # ##
 
   # Create a results list
@@ -104,7 +119,8 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
     maxL <- max(param_df$nQTL)
     tp_size <- core_df$tp_size[i]
     gencor <- core_df$gencor[i]
-    probcor <- core_df$input[[i]]
+    probcor <- core_df$probor[[i]]
+
 
     # Simulate QTL
     qtl_model <- replicate(n = 2, matrix(NA, ncol = 4, nrow = L), simplify = FALSE)
@@ -112,17 +128,15 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
                                    corr = gencor, prob.corr = probcor)
 
     ## Adjust the genetic architecture - only if pleiotropy is not present
-    if (probcor[1] != 0) {
+    if (all(probcor[,1] == 0)) {
       genome1 <- adj_multi_gen_model(genome = genome1, geno = s2_cap_genos, gencor = gencor)
     }
 
-      
     # Create the TP by random selection
-    tp1 <- create_pop(genome = genome1, geno = s2_cap_genos[sort(sample(nrow(s2_cap_genos), size = tp_size)),]) %>% 
+    tp1 <- create_pop(genome = genome1, geno = s2_cap_genos[sort(sample(nrow(s2_cap_genos), size = tp_size)),]) %>%
       # Phenotype the base population
-      sim_phenoval(pop = ., h2 = c(trait1_h2, trait2_h2), n.env = n_env, n.rep = n_rep) 
-    
-    
+      sim_phenoval(pop = ., h2 = c(trait1_h2, trait2_h2), n.env = n_env, n.rep = n_rep)
+
     # Measure the genetic correlation in the TP
     tp_cor <- cor(tp1$geno_val[,-1])[1,2]
     # Measure the phenotypic correlation in the TP
@@ -136,7 +150,7 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
     # crossing_block <- sim_crossing_block(parents = indnames(tp_select), n.crosses = 40)
     # # Pedigree to accompany the crosses
     # ped <- sim_pedigree(n.ind = 25, n.selfgen = Inf)
-    # 
+    #
     # # Make theses crosses
     # par_pop <- sim_family_cb(genome = genome1, pedigree = ped, founder.pop = tp_select, crossing.block = crossing_block)
     # #####
@@ -147,6 +161,7 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
     ped <- sim_pedigree(n.ind = sim_pop_size, n.selfgen = Inf)
 
 
+
     ## Predict genetic variance and correlation
     pred_out <- pred_genvar(genome = genome1, pedigree = ped, training.pop = tp1, founder.pop = par_pop,
                             crossing.block = crossing_block) %>%
@@ -154,52 +169,12 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
 
 
 
-    # ## Check the predictions of correlation versus PopVar
-    # # Convert items for PopVar
-    # # Pheno
-    # pheno_use <- tp1$pheno_val$pheno_mean
-    # geno_use <- genotype(genome1, combine_pop(list(tp1, par_pop)))
-    # map_use <- genome2$gen_model$trait1 %>%
-    #   select(qtl_name, chr, pos)
-    #
-    #
-    # # # Pass to PopVar
-    # # Convert genotypes into something useable for PopVar
-    # geno_use <- as.data.frame(cbind( c("", row.names(geno_use)), rbind(colnames(geno_use), geno_use)) )
-    #
-    # pred_out_pv <- pop.predict(G.in = geno_use, y.in = pheno_use, map.in = map_use,
-    #                           crossing.table = crossing_block, tail.p = 0.1, nInd = sim_pop_size,
-    #                           min.maf = 0, mkr.cutoff = 1, entry.cutoff = 1, remove.dups = FALSE,
-    #                           nSim = n_pops, nCV.iter = 1, models = "rrBLUP", impute = "pass")
-    #
-    # # Tidy
-    # tidy_pred_out <- pred_out_pv$predictions %>%
-    #   map(as.data.frame) %>%
-    #   map(~mutate_all(., unlist) %>% rename_at(vars(contains("cor")), ~"pred.corG")) %>%
-    #   list(., names(.)) %>%
-    #   pmap_df(~mutate(.x, trait = str_extract(.y, "trait[0-9]{1}"))) %>%
-    #   select(parent1 = Par1, parent2 = Par2, trait, pred.varG, pred.corG)
-    #
-    # ## Correlate predictions of genetic variance and correlation
-    # pred_out %>%
-    #   left_join(., tidy_pred_out) %>%
-    #   distinct(parent1, parent2, pred_corG, pred.corG) %>%
-    #   summarize(acc = cor(pred_corG, pred_corG))
-    #
-    # pred_out %>%
-    #   left_join(., tidy_pred_out) %>%
-    #   group_by(trait) %>%
-    #   summarize(acc = cor(pred_varG, pred_varG))
-    #
-    # ## Completely accurate!
-
-
-
 
     ## Calculate the expected genetic variance in these populations
     expected_var <- calc_exp_genvar(genome = genome1, pedigree = ped, founder.pop = par_pop, crossing.block = crossing_block) %>%
       mutate(exp_musp = exp_mu + (k_sp * sqrt(exp_varG)))
-    
+
+
     ## Combine the expected and predicted results
     expected_predicted <- full_join(
       x = pred_out %>% rename_all(~str_replace(., "pred_", "")) %>% gather(parameter, prediction, -parent1:-trait),
@@ -208,19 +183,19 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
     ) %>% 
       # If looking at the correlation, change the trait to simply trait1
       filter(!(trait == "trait2" & parameter == "corG"))
-
+    
     # Summarize
     results_summ <- expected_predicted %>% 
       group_by(trait, parameter) %>% 
       summarize(accuracy = cor(prediction, expectation, use = "complete.obs"), 
                 bias = mean(prediction - expectation) / mean(expectation))
-
+    
     ## Add the accuracy results to the results list
     results_out[[i]] <- list(
       summary = results_summ,
       other = data.frame(variable = c("tp_gencor", "tp_phencor"), value = c(tp_cor, tp_pheno_cor))
     )
-
+    
   }
 
   # Add the results to the core_df, remove core
@@ -231,19 +206,8 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
 }, mc.cores = n_cores)
 
 # Bind and save
-popvar_prediction_simulation_out <- bind_rows(simulation_out)
+popvar_corG_space_simulation_out <- bind_rows(simulation_out)
 
 # Save
-save_file <- file.path(result_dir, "popvar_gencor_simulation_prediction_results.RData")
-save("popvar_prediction_simulation_out", file = save_file)
-
-
-
-
-
-
-
-
-
-
-
+save_file <- file.path(result_dir, "popvar_gencor_space_simulation_results.RData")
+save("popvar_corG_space_simulation_out", file = save_file)
