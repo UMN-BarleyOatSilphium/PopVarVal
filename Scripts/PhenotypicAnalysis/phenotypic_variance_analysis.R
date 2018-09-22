@@ -285,6 +285,41 @@ ggsave(filename = "family_parameter_boot_FHB.jpg", plot = g_family_boot, path = 
 
 
 
+## Calculate the correlation among families between HD and FHB in Crookston and St. Paul
+vp_family_tomodel2 <- vp_family_tomodel1 %>% 
+  filter(trait %in% c("FHBSeverity", "HeadingDate"))
+
+# Fit a model for each location
+vp_family_FHB_HD_mean <- vp_family_tomodel2 %>%
+  group_by(location, trait) %>%
+  do(calc_mean(data = .)) %>%
+  ungroup()
+
+# Calculate the correlation
+vp_family_FHB_HD_mean1 <- vp_family_FHB_HD_mean %>% 
+  ungroup() %>% 
+  unnest(means) %>% 
+  filter(term != "family_mean") %>% 
+  select(location, line_name = term, trait, mean) %>% 
+  spread(trait, mean) %>% 
+  filter_at(vars(FHBSeverity, HeadingDate), all_vars(!is.na(.)))
+
+
+vp_family_FHB_HD_mean1 %>% 
+  group_by(location) %>%
+  do(neyhart::bootstrap(x = .$FHBSeverity, y = .$HeadingDate, "cor"))
+
+# location statistic    base     se      bias ci_lower ci_upper
+# 1 CRM      cor       -0.512  0.0189 0.0000804  -0.548   -0.473 
+# 2 STP      cor        0.0163 0.0248 0.0000572  -0.0327   0.0672
+
+vp_family_FHB_HD_mean1 %>% 
+  qplot(x = FHBSeverity, y = HeadingDate, data = ., facets = ~ location) + 
+  theme_acs()
+
+
+
+
 
 ## Save the variance calculations
 save("vp_family_varG_method1", "vp_family_varG_FHB_method1", "vp_family_musp", "vp_family_FHB_musp", 

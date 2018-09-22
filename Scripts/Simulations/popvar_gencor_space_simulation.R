@@ -57,9 +57,9 @@ n_crosses <- 50
 k_sp <- 1.76
 
 ## Outline the parameters to perturb
-trait1_h2_list <- trait2_h2_list <- 0.5
+trait1_h2_list <- trait2_h2_list <- 0.6
 nQTL_list <- c(100)
-tp_size_list <- 300
+tp_size_list <- 600
 gencor_list <- c(-0.5, 0, 0.5)
 
 ## Percentage of pleiotropy versus degree of linkage
@@ -71,10 +71,10 @@ probcor_list <- crossing(pPleio, dLinkage) %>%
   mutate(pLinkage = 1 - pPleio) %>%
   pmap(~rbind(cbind(0, ..1), cbind(..2, ..3))) %>%
   # Remove any rows with 0 probability
-  map(~.[.[,2] != 0,,drop = FALSE])
+  map(~.[.[,2] != 0,,drop = FALSE] %>% `colnames<-`(., c("dL", "pL")))
 
 
-probcor_df <- data_frame(probor = probcor_list)
+probcor_df <- data_frame(probcor = probcor_list)
 
 
 # Create a data.frame of parameters
@@ -119,7 +119,7 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
     maxL <- max(param_df$nQTL)
     tp_size <- core_df$tp_size[i]
     gencor <- core_df$gencor[i]
-    probcor <- core_df$probor[[i]]
+    probcor <- core_df$probcor[[i]]
 
 
     # Simulate QTL
@@ -128,17 +128,20 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
                                    corr = gencor, prob.corr = probcor)
 
     ## Adjust the genetic architecture - only if pleiotropy is not present
-    if (all(probcor[,1] == 0)) {
+    if (all(probcor[,1] != 0)) {
       genome1 <- adj_multi_gen_model(genome = genome1, geno = s2_cap_genos, gencor = gencor)
     }
-
+    
+    
     # Create the TP by random selection
-    tp1 <- create_pop(genome = genome1, geno = s2_cap_genos[sort(sample(nrow(s2_cap_genos), size = tp_size)),]) %>%
+    tp1 <- create_pop(genome = genome1, geno = s2_cap_genos[sort(sample(nrow(s2_cap_genos), size = tp_size)),]) %>% 
       # Phenotype the base population
-      sim_phenoval(pop = ., h2 = c(trait1_h2, trait2_h2), n.env = n_env, n.rep = n_rep)
-
+      sim_phenoval(pop = ., h2 = c(trait1_h2, trait2_h2), n.env = n_env, n.rep = n_rep) 
+    
+    
     # Measure the genetic correlation in the TP
     tp_cor <- cor(tp1$geno_val[,-1])[1,2]
+
     # Measure the phenotypic correlation in the TP
     tp_pheno_cor <- cor(tp1$pheno_val$pheno_mean[,-1])[1,2]
     par_pop <- tp1

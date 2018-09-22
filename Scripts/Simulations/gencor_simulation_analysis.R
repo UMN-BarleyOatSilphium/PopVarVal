@@ -165,14 +165,24 @@ ggsave(filename = "gencor_simulation_accuracy.jpg", plot = g_accuracy1, path = f
 # Load the simulation results
 load(file.path(result_dir, "popvar_gencor_space_simulation_results.RData"))
 
+# Mutate the architecture space combinations
+sim_out1 <- popvar_corG_space_simulation_out %>% 
+  mutate(probor = map(probor, ~`names<-`(as.data.frame(.), c("dLinkage", "pLinkage")) %>% tail(., 1))) %>% # The tail is used to remove the probabilities of pleiotropy))
+  unnest(probor)
+  
+## Are there any missing combinations?
+sim_out1 %>%
+  distinct(trait1_h2, trait2_h2, gencor, dLinkage, pLinkage, iter) %>%
+  mutate_all(as.factor) %>% 
+  mutate(obs = T) %>% 
+  complete(trait1_h2, trait2_h2, gencor, dLinkage, pLinkage, iter, fill = list(obs = F)) %>% 
+  filter(!(dLinkage == 0 & pLinkage != 0)) %>%
+  filter(!obs)
+
 # Tidy the results and extract the probability of linkage and the degree of linkage
-sim_results_tidy <- popvar_corG_space_simulation_out %>%
-  rename(probcor = probor) %>%
-  mutate(probcor = map(probcor, ~as.data.frame(.) %>% `names<-`(., c("dLinkage", "pLinkage")) %>% tail(., 1))) %>% # The tail is used to remove the probabilities of pleiotropy
-  unnest(probcor) %>%
+sim_results_tidy <- sim_out1 %>%
   ## Extract the results
-  mutate(predictions = map(results, "summary"),
-         correlations = map(results, "other")) %>%
+  bind_cols(., as_data_frame(transpose(.$results))) %>%
   select(-results) %>%
   mutate_at(vars(trait1_h2:gencor, dLinkage, pLinkage), as.factor)
   
@@ -180,9 +190,14 @@ sim_results_tidy <- popvar_corG_space_simulation_out %>%
 
 ## Extract the training population genetic correlation
 base_cor_summ <- sim_results_tidy %>%
-  unnest(correlations) %>%
+  unnest(other) %>%
   group_by(trait1_h2, trait2_h2, nQTL, tp_size, gencor, dLinkage, pLinkage, variable) %>%
-  summarize_at(vars(value), funs(mean, sd)) %>%
+  summarize_at(vars(value), funs(mean(., na.rm = T), sd(., na.rm = T), n()))
+
+
+
+
+%>%
   ## Fill-in missing combinations when dLinkage == 0
   bind_rows(., 
             filter(., dLinkage == 0) %>%
@@ -218,17 +233,33 @@ ggsave(filename = "gencor_arch_space_base_corG.jpg", plot = g_base_cor, path = f
 ## Extract the prediction results
 # Summarize
 pred_results_summ <- sim_results_tidy %>%
-  unnest(predictions) %>%
+  unnest(summary) %>%
   gather(variable, value, accuracy, bias) %>%
   filter(!(variable == "bias" & abs(value) > 2)) %>%
   group_by(trait1_h2, trait2_h2, nQTL, tp_size, gencor, dLinkage, pLinkage, trait, parameter, variable) %>%
-  summarize_at(vars(value), funs(mean, sd, n())) %>%
-  ungroup()
+  summarize_at(vars(value), funs(mean(., na.rm = T), sd(., na.rm = T), n()))
+
+
+pred_results_summ %>% 
+
+
+pred_results_pleio_summ <- 
+  ## Fill-in missing combinations when dLinkage == 0
+  bind_rows(., 
+            filter(., dLinkage == 0) %>%
+              group_by(variable, add = T) %>% 
+              complete(trait1_h2, trait2_h2, nQTL, tp_size, gencor, pLinkage, parameter, variable) %>%
+              group_by(trait1_h2, trait2_h2, nQTL, tp_size, gencor, parameter, variable) %>% 
+              mutate_at(vars(mean, sd), funs(mean), na.rm = T) %>%
+              ungroup() %>%
+              distinct(trait1_h2, trait2_h2, nQTL, tp_size, gencor, pLinkage, dLinkage, parameter, variable, mean, sd) %>%
+              filter(pLinkage != 1)
+  ) %>% ungroup()
 
 
 ## Plot results for genetic correlation
 g_pred_acc_corG <- pred_results_summ %>%
-  filter(dLinkage != 0, parameter == "corG", variable == "accuracy") %>%
+  filter(parameter == "corG", variable == "accuracy") %>%
   ggplot(aes(x = pLinkage, y = dLinkage, fill = mean)) +
   geom_tile() +
   scale_fill_gradient(low = "white", high = "green") +
@@ -238,7 +269,7 @@ g_pred_acc_corG <- pred_results_summ %>%
 
 # bias
 g_pred_bias_corG <- pred_results_summ %>%
-  filter(dLinkage != 0, parameter == "corG", variable == "bias") %>%
+  filter(parameter == "corG", variable == "bias") %>%
   ggplot(aes(x = pLinkage, y = dLinkage, fill = mean)) +
   geom_tile() +
   scale_fill_gradient2(low = "red", high = "blue") +

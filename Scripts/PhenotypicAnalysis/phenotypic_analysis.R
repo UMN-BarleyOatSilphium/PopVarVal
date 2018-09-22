@@ -242,8 +242,8 @@ lrt_out <- map(fits[-1], ~lr_test(model1 = fits[[1]], model2 = .)) %>%
 #### Separate analysis for CRM and STP for FHB
 ## Run models
 tp_analysis_FHB <- tp_prediction_tomodel %>%
-  filter(trait == "FHBSeverity") %>%
-  group_by(location) %>%
+  filter(trait %in% c("FHBSeverity", "HeadingDate")) %>%
+  group_by(location, trait) %>%
   do({
     df <- .
     print(unique(df$trait))
@@ -253,6 +253,7 @@ tp_analysis_FHB <- tp_prediction_tomodel %>%
 
 ## Look at variance components and heritability
 (g_tp_prediction_h2 <- tp_analysis_FHB %>% 
+    filter(trait == "FHBSeverity") %>%
     mutate(h2 = map_dbl(h2, "heritability")) %>% 
     qplot(x = location, y = h2, geom = "col", fill = "blue", data = .) +
     geom_text(aes(label = str_c("Envs: ", n_e)), vjust = 2) +
@@ -260,6 +261,26 @@ tp_analysis_FHB <- tp_prediction_tomodel %>%
     scale_fill_discrete(guide = FALSE))
 
 ggsave(filename = "tp_prediction_h2_FHB.jpg", plot = g_tp_prediction_h2, path = fig_dir, height = 5, width = 5, dpi = 1000)
+
+
+## Calculate the correlation between FHB and HD
+tp_FHB_HD <- tp_analysis_FHB %>% 
+  unnest(BLUE) %>% 
+  select(location, line_name, trait, value) %>% 
+  spread(trait, value) %>% 
+  group_by(location)
+
+
+
+tp_FHB_HD %>% 
+  summarize(cor = cor(FHBSeverity, HeadingDate))
+
+# location    cor
+# 1 CRM      -0.600
+# 2 STP      -0.233
+
+qplot(data = tp_FHB_HD, x = FHBSeverity, y = HeadingDate, facets = ~location) + theme_acs()
+
 
 
 tp_var_prop <- tp_analysis_FHB %>% 

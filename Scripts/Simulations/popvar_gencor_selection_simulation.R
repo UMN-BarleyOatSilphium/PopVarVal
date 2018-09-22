@@ -42,7 +42,7 @@ n_cores <- detectCores()
 
 
 ## Fixed parameters
-tp_size <- 500
+tp_size <- 600
 tp_select <- 25
 # cross_preselect <- 150
 cross_select <- 25

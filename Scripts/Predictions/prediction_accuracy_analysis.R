@@ -281,9 +281,24 @@ popvar_trait_bias <- popvar_bias %>%
 
 # Plot
 popvar_bias %>%
+  filter(tp_set == "realistic") %>%
   ggplot(aes(x = family, y = bias, color = parameter)) + 
   geom_point() + 
   facet_wrap(~ trait + parameter, scales = "free")
+
+## Just plot bias for variance
+g_variance_bias <- popvar_bias %>%
+  filter(parameter == "variance", tp_set == "realistic") %>%
+  ggplot(aes(x = family, y = bias)) + 
+  geom_point(size = 0.5) + 
+  facet_wrap(~ trait, scales = "free") +
+  ylab("Bias") +
+  xlab("Family") + 
+  theme_acs() +
+  theme(axis.text.x = element_blank())
+
+ggsave(filename = "predicted_variance_bias.jpg", plot = g_variance_bias, path = fig_dir, height = 1.5, width = 3.5, dpi = 1000)
+
 
 # Plot bias versus heritability
 popvar_bias_herit <- popvar_bias %>% 
