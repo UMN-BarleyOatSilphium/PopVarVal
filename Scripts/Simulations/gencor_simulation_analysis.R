@@ -167,8 +167,8 @@ load(file.path(result_dir, "popvar_gencor_space_simulation_results.RData"))
 
 # Mutate the architecture space combinations
 sim_out1 <- popvar_corG_space_simulation_out %>% 
-  mutate(probor = map(probor, ~`names<-`(as.data.frame(.), c("dLinkage", "pLinkage")) %>% tail(., 1))) %>% # The tail is used to remove the probabilities of pleiotropy))
-  unnest(probor)
+  mutate(probcor = map(probcor, ~`names<-`(as.data.frame(.), c("dLinkage", "pLinkage")) %>% tail(., 1))) %>% # The tail is used to remove the probabilities of pleiotropy))
+  unnest(probcor)
   
 ## Are there any missing combinations?
 sim_out1 %>%
@@ -192,12 +192,7 @@ sim_results_tidy <- sim_out1 %>%
 base_cor_summ <- sim_results_tidy %>%
   unnest(other) %>%
   group_by(trait1_h2, trait2_h2, nQTL, tp_size, gencor, dLinkage, pLinkage, variable) %>%
-  summarize_at(vars(value), funs(mean(., na.rm = T), sd(., na.rm = T), n()))
-
-
-
-
-%>%
+  summarize_at(vars(value), funs(mean(., na.rm = T), sd(., na.rm = T), n())) %>%
   ## Fill-in missing combinations when dLinkage == 0
   bind_rows(., 
             filter(., dLinkage == 0) %>%
@@ -237,14 +232,7 @@ pred_results_summ <- sim_results_tidy %>%
   gather(variable, value, accuracy, bias) %>%
   filter(!(variable == "bias" & abs(value) > 2)) %>%
   group_by(trait1_h2, trait2_h2, nQTL, tp_size, gencor, dLinkage, pLinkage, trait, parameter, variable) %>%
-  summarize_at(vars(value), funs(mean(., na.rm = T), sd(., na.rm = T), n()))
-
-
-pred_results_summ %>% 
-
-
-pred_results_pleio_summ <- 
-  ## Fill-in missing combinations when dLinkage == 0
+  summarize_at(vars(value), funs(mean(., na.rm = T), sd(., na.rm = T), n())) %>%  ## Fill-in missing combinations when dLinkage == 0
   bind_rows(., 
             filter(., dLinkage == 0) %>%
               group_by(variable, add = T) %>% 

@@ -128,7 +128,7 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
                                    corr = gencor, prob.corr = probcor)
 
     ## Adjust the genetic architecture - only if pleiotropy is not present
-    if (all(probcor[,1] != 0)) {
+    if (any(probcor[,1] != 0)) {
       genome1 <- adj_multi_gen_model(genome = genome1, geno = s2_cap_genos, gencor = gencor)
     }
     
