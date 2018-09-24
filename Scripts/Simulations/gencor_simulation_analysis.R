@@ -314,6 +314,7 @@ popvar_selection_sim_tidy <- popvar_gencor_selection_simulation_out %>%
   mutate_at(vars(trait1_h2, trait2_h2, gencor, arch), as.factor) %>%
   mutate(arch = factor(str_replace_all(arch, arch_replace), levels = arch_replace))
 
+
 ## Unnest the correlations
 correlations_tidy <- popvar_selection_sim_tidy %>%
   unnest(correlations) %>%
@@ -372,7 +373,7 @@ response_summary <- response_tomodel %>%
 ### Plotting 
 
 # Choose a selection intensity to investigate
-i_sp <- 0.01
+i_sp <- 0.10
 
 ## Response to selection of the index - relative to base population
 g_stand_resp <- response_summary %>%
@@ -589,6 +590,47 @@ plot(effects::allEffects(fit_resp))
 ## 1. architecture x selection is not significant
 ## 2. musp and muspC outperform mu, especially if the architecture is not pleiotropy
 ## 
+
+
+
+
+
+### Examine the genetic correlations
+# First gather the correlations among the base pop, the selected parents, and the selected offspring
+correlations_tidy1 <- correlations_tidy %>% 
+  group_by(trait1_h2, trait2_h2, gencor, arch, iter) %>% 
+  nest(.key = "tp")
+
+correlations_tidy2 <- select(response_tidy, trait1_h2:corG) %>% 
+  filter(trait == "trait1", intensity == i_sp) %>% 
+  select(trait1_h2:selection, c1_select_cor = corG, -intensity) %>% 
+  gather(type, base_corG, c1_select_cor) %>% 
+  group_by(trait1_h2, trait2_h2, gencor, arch, iter) %>% 
+  nest(.key = "vp")
+
+correlations_summ <- full_join(correlations_tidy1, correlations_tidy2, by = c("trait1_h2", "trait2_h2", "gencor", "arch", "iter")) %>%
+  mutate(data = pmap(list(.$tp, .$vp), ~crossing(selection = .y$selection, .x) %>% full_join(., .y, by = c("selection", "type", "base_corG")))) %>% 
+  unnest(data) %>%
+  group_by(trait1_h2, trait2_h2, gencor, arch, selection, type) %>%   
+  summarize_at(vars(base_corG), funs(mean, sd, n())) %>%
+  ungroup() %>%
+  mutate(stat = qt(p = 1 - (alpha / 2), df = n - 1) * (sd / sqrt(n) ),
+         lower = mean - stat, upper = mean + stat,
+         type = factor(type, c("tp_base_cor", "tp_select_cor", "c1_select_cor")))
+
+
+
+## Plot the progression of the correlations
+correlations_summ %>% 
+  filter(type != "tp_pheno_cor") %>% 
+  filter(trait1_h2 == 0.6, trait2_h2 != 1) %>% 
+  ggplot(aes(x = type, y = mean, color = selection, group = selection, ymin = lower, ymax = upper)) +
+  geom_point() + 
+  geom_line() + 
+  geom_errorbar(width = 0.2) + 
+  facet_grid(trait1_h2 + trait2_h2 ~ arch + gencor) + 
+  theme_acs()
+
 
 
 

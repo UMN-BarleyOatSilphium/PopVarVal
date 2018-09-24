@@ -121,17 +121,18 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
       # Phenotype the base population
       sim_phenoval(pop = ., h2 = c(trait1_h2, trait2_h2), n.env = n_env, n.rep = n_rep)
     
-    # Measure the genetic variance in the tp1
-    tp1_genvar <- diag(var(tp1$geno_val[,-1]))
-    
-    # Measure the genetic correlation in the TP (i.e. base population)
+    # Measure the genetic variance, genetic covariance, and genetic correlation in the tp1
+    tp1_vcov <- var(tp1$geno_val[,-1])
+    tp1_genvar <- diag(tp1_vcov)
+    tp1_gencovar <- tp1_vcov[1,2]
     tp_cor <- cor(tp1$geno_val[,-1])[1,2]
+    
     # Measure the phenotypic correlation in the TP
     tp_pheno_cor <- cor(tp1$pheno_val$pheno_mean[,-1])[1,2]
  
     ## Predict the genotypic values for the TP, then select the best from the tp
     # First create a set of weights based on the observed phenotypic variance
-    weights <- c(0.5, 0.5) / sqrt(diag(var(tp1$pheno_val$pheno_mean[,-1])))
+    weights <- c(0.5, 0.5)
     
     par_pop <- pred_geno_val(genome = genome1, training.pop = tp1, candidate.pop = tp1) %>%
       # select_pop(pop = ., intensity = sqrt(tp_select/nind(tp1)), index = c(1, 0), type = "genomic") %>%
@@ -150,7 +151,10 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
 
 
 
-    # Measure the genetic correlation in the TP
+    # Measure the genetic variance, co-variance, and correlation in the selected tp
+    tp_select_vcov <- var(par_pop$geno_val[,-1])
+    tp_select_var <- diag(tp_select_vcov)
+    tp_select_covar <- tp_select_vcov[1,2]
     tp_select_cor <- cor(par_pop$geno_val[,-1])[1,2]
 
     ## Create a crossing block with all of the possible non-reciprocal combinations of the TP
@@ -211,15 +215,15 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
       slice(1:cross_select) %>%
       select(contains("parent"))
 
-    ## Now select on an index of the superior progeny means (this effectively ignores the correlation)
-    ## Select the crosses that maximize the correlated superior progeny mean of trait2
-    cb_select_musp <- pred_out %>% 
-      select(parent1:trait, pred_musp) %>% 
-      spread(trait, pred_musp) %>% 
-      mutate(musp_index = (trait1 * weights[1]) + (trait2 * weights[2])) %>%
-      arrange(desc(musp_index)) %>% 
-      slice(1:cross_select) %>%
-      select(contains("parent"))
+    # ## Now select on an index of the superior progeny means (this effectively ignores the correlation)
+    # ## Select the crosses that maximize the correlated superior progeny mean of trait2
+    # cb_select_musp <- pred_out %>% 
+    #   select(parent1:trait, pred_musp) %>% 
+    #   spread(trait, pred_musp) %>% 
+    #   mutate(musp_index = (trait1 * weights[1]) + (trait2 * weights[2])) %>%
+    #   arrange(desc(musp_index)) %>% 
+    #   slice(1:cross_select) %>%
+    #   select(contains("parent"))
 
     ## Now select random crosses
     cb_select_rand <- pred_out %>%
@@ -228,13 +232,23 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
 
 
     ## Combine crossing blocks
-    cb_list <- list(muspC = cb_select_muspC, corG = cb_select_corG, mean = cb_select_mean, musp = cb_select_musp, rand = cb_select_rand)
+    cb_list <- list(muspC = cb_select_muspC, corG = cb_select_corG, mean = cb_select_mean, rand = cb_select_rand)
 
     ### Create all of the crosses
     cycle1_list <- cb_list %>%
       map(~sim_family_cb(genome = genome1, pedigree = ped, founder.pop = par_pop, crossing.block = .) %>%
             pred_geno_val(genome = genome1, training.pop = tp1, candidate.pop = .))
 
+    
+    # Measure the genetic variance, covariance, and correlation in the C1
+    c1_vcov <- cycle1_list %>%
+      map("geno_val") %>% 
+      map(~var(.[,-1]))
+    
+    c1_var <- map(c1_vcov, ~diag(.))
+    c1_covar <- map(c1_vcov, ~.[1,2])
+    c1_cor <- map(c1_vcov, ~.[1,2] / prod(sqrt(diag(.))))
+    
 
     ## Select progeny on a range of selection intensities
     selections <- data_frame(intensity = ints)
@@ -248,7 +262,7 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
     
     ## Summarize the mean and cor of each/both traits
     response <- selections %>%
-      mutate(muspC = map(summ, "muspC"), corG = map(summ, "corG"), musp = map(summ, "musp"), mean = map(summ, "mean"), rand = map(summ, "rand")) %>%
+      mutate(muspC = map(summ, "muspC"), corG = map(summ, "corG"), mean = map(summ, "mean"), rand = map(summ, "rand")) %>%
       select(-summ) %>% 
       gather(selection, out, -intensity) %>%
       unnest() %>%
@@ -283,14 +297,17 @@ simulation_out <- mclapply(X = param_df_split, FUN = function(core_df) {
                          stringsAsFactors = FALSE))
 
     # Other data
-    cors <- data.frame(type = c("tp_base_cor", "tp_pheno_cor", "tp_select_cor"), corG = c(tp_cor, tp_pheno_cor, tp_select_cor),
-                       stringsAsFactors = FALSE, row.names = NULL)
+    tp_meta <- crossing(type = c("tp_base", "tp_select"), variable = c("var", "cov", "cor")) %>% 
+      mutate(value = list(tp_cor, tp1_gencovar, tp1_genvar, tp_select_cor, tp_select_covar, tp_select_var))
+    
+    c1_meta <- data.frame(type = "c1_all", variable = c("cor", "cov", "var"), row.names = NULL, stringsAsFactors = FALSE) %>%
+      tbl_df() %>% mutate(value = list(c1_cor, c1_covar, c1_var))
 
     ## Add the response and other results
     results_out[[i]] <- list(
       response = response_summary,
       common_cross = common_crosses,
-      correlations = cors
+      correlations = bind_rows(tp_meta, c1_meta)
     )
 
   }
