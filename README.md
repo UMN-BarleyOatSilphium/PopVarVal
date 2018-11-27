@@ -8,9 +8,9 @@ Project repository for the empirical validation of PopVar within the University 
 Data
 ----
 
-Data used in this study are available from the [Triticeae Toolbox](https://triticeaetoolbox.org/barley). See the README in the "Data" subfolder for instructions on accessing this data.
+Data used in this study are available from the [Triticeae Toolbox](https://triticeaetoolbox.org/barley). See [this README](https://github.com/neyhartj/PopVarVal/tree/master/Data) for instructions on accessing this data.
 
 Scripts
 -------
 
-Scripts used to complete the analysis and generate figures are available in the "Scripts" subfolder.
+Scripts used to complete the analysis and generate figures are available in the "Scripts" subfolder. See [this README](https://github.com/neyhartj/PopVarVal/tree/master/Scripts) for information on the scripts and their intended execution order.

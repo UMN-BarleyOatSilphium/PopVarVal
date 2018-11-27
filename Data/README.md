@@ -3,16 +3,24 @@
 Data
 ====
 
-Below are instructions for obtaining from the [Triticeae Toolbox (T3)](https://triticeaetoolbox.org/barley) the data used in this study. These instructions work as of 27 November, 2018.
+Below is information on the data in this subfolder, as well as instructions for obtaining from the [Triticeae Toolbox (T3)](https://triticeaetoolbox.org/barley) the experimental data used in this study. These instructions work as of 27 November, 2018.
 
-Training population and parent candidates
------------------------------------------
+Data in this subfolder
+----------------------
 
-### Genomewide marker data
+1.  `project_entries.csv` - line name, program name, population group, predigree, family, and notes for all barley lines used in this study.
+2.  `trial_metadata.csv` - information on the experimental trials used in this study.
+
+Data from T3
+------------
+
+### Training population and parent candidates
+
+#### Genomewide marker data
 
 Currently, the genomewide marker data is not available on T3. Please [email me](neyha001@umn.edu) to obtain this data.
 
-### Phenotype data
+#### Phenotype data
 
 1.  Go to <https://triticeaetoolbox.org/barley>.
 2.  Under the "Select" tab, go to "Wizard (Lines, Traits, Trials)".
@@ -27,10 +35,9 @@ Currently, the genomewide marker data is not available on T3. Please [email me](
 7.  Click the "Create file" button with instructions for one column for each trait (not used by TASSEL).
 8.  Click the "Download Zip file of results" button.
 
-Validation population
----------------------
+### Validation population
 
-### Phenotype data
+#### Phenotype data
 
 1.  Go to <https://triticeaetoolbox.org/barley>.
 2.  Under the "Select" tab, go to "Wizard (Lines, Traits, Trials)".
