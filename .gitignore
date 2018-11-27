@@ -3,7 +3,11 @@
 .RData
 .Ruserdata
 /Results/*
+/README.Rmd
+/Data/README.Rmd
+/Scripts/README.Rmd
 /Data/PVV_BLUE.RData
 /Figures/*
 *.e*
 *.o*
+*JLN*

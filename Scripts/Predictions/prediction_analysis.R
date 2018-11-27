@@ -291,40 +291,7 @@ for (i in seq_along(g_mean_var_noted_list)) {
 
 
 
-# ## Predict the value of all vp individuals using the TP
-# load(file.path(pheno_dir, "PVV_BLUE.RData"))
-# 
-# K <- A.mat(s2_imputed_mat_use, min.MAF = 0, max.missing = 1)
-# 
-# tp_prediction_BLUE1 <- tp_prediction_BLUE %>%
-#   filter(trait == "FHBSeverity", line_name %in% tp_geno) %>%
-#   select(-trait)
-# 
-# preds <- kin.blup(data = as.data.frame(tp_prediction_BLUE1), 
-#                   geno = "line_name", pheno = "value", GAUSS = FALSE, K = K)
-# 
-# vp_pred <- preds$pred %>% 
-#   data_frame(line_name = names(.), pred = .) %>%
-#   filter(line_name %in% pot_pars_geno)
-# 
-# ## Look for a marker that might explain the high predicted value for this individual
-# marker_eff <- mixed.solve(y = pull(tp_prediction_BLUE1, value), Z = s2_imputed_mat_use[tp_geno,])$u
 
-
-
-## What is the relationship between family mean and mu_sp?
-## 
-
-# Plot
-g_pred_mean_musp <- popvar_pred %>% 
-  ggplot(aes(x = pred_mu, y = musp_low)) + 
-  geom_point(size = 1) + 
-  geom_abline(slope = 1) + 
-  facet_wrap(~ trait, ncol = 3, scales = "free") + 
-  theme_acs()
-
-ggsave(filename = "prediction_mean_musp.jpg", plot = g_pred_mean_musp, path = fig_dir, 
-       height = 3, width = 7.5, dpi = 1000)
 
 
 ## Fit models
@@ -493,74 +460,6 @@ g_parent_pred_summ <- vp_parent_pred_summ %>%
   facet_wrap(~ parameter, ncol = 2, labeller = label_parsed) +
   theme_acs() +
   theme(legend.position = c(0.85, 0.85))
-
-
-
-
-
-
-## What would be the response to selection when selecting the top 30 families based on mu versus mu_sp?
-popvar_pred1 <- popvar_pred_toplot$realistic %>% 
-  spread(parameter, prediction)
-
-popvar_pred_select <- popvar_pred_toplot$realistic %>% 
-  filter(parameter != "V[G]") %>% 
-  group_by(trait, parameter) %>% 
-  top_n(n = -30, wt = prediction) %>% 
-  ungroup() %>%
-  # Combine with the other prediction data
-  left_join(., popvar_pred1, by = c("parent1", "parent2", "family", "trait")) %>%
-  select(-prediction) %>%
-  rename(selection = parameter)
-
-## Summarize
-popvar_pred_select %>% 
-  group_by(trait, selection) %>% 
-  summarize_at(vars(mu:`mu[sp]`), mean)
-
-# trait       selection    mu `V[G]` `mu[sp]`
-# 1 FHBSeverity mu         11.7 0.296      10.8
-# 2 FHBSeverity mu[sp]     11.9 0.611      10.6
-# 3 HeadingDate mu         47.6 0.223      46.9
-# 4 HeadingDate mu[sp]     47.9 0.532      46.6
-# 5 PlantHeight mu         70.5 0.0709     70.0
-# 6 PlantHeight mu[sp]     70.6 0.137      70.0
-
-
-## For each trait and selection group, plot the mu, mu_sp, and varG
-popvar_pred_select_toplot <- popvar_pred_select %>% 
-  gather(parameter, prediction, mu:`mu[sp]`) %>% 
-  mutate(parameter_type = ifelse(parameter == "V[G]", "Variance", "Mean"))
-
-g_pred_mean <- popvar_pred_select_toplot %>%
-  filter(parameter_type == "Mean") %>%
-  ggplot(aes(x = parameter, y = prediction, color = selection)) +
-  geom_boxplot() +
-  facet_grid(trait ~ parameter_type, scales = "free", space = "free_x",switch = "y") +
-  theme_acs()
-
-g_pred_var <- popvar_pred_select_toplot %>%
-  filter(parameter_type != "Mean") %>%
-  ggplot(aes(x = parameter, y = prediction, color = selection)) +
-  geom_boxplot() + 
-  facet_grid(trait ~ parameter_type, scales = "free", space = "free_x",switch = "y") +
-  theme_acs()
-
-g_pred <- plot_grid(
-  g_pred_mean + theme(legend.position = "none"), 
-  g_pred_var + theme(strip.text.y = element_blank(), axis.title.y = element_blank()), 
-  ncol = 2, rel_widths = c(1, 0.7))
-
-
-
-
-
-
-
-
-
-
-
 
 
 

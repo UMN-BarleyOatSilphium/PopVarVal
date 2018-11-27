@@ -7,7 +7,7 @@
 ## 
 
 # Run the source script
-repo_dir <- "/panfs/roc/groups/6/smithkp/neyha001/Genomic_Selection/PopVarVal/" 
+repo_dir <- "path/to/repository/on/supercomputer" 
 source(file.path(repo_dir, "source_MSI.R"))
 
 # # Run on a local machine
@@ -16,7 +16,7 @@ source(file.path(repo_dir, "source_MSI.R"))
 # library(PopVar)
 
 # Load genotypic and phenotypic data
-load(file.path(geno_dir, "S2_genos_mat.RData"))
+load("path/to/S2_genos_mat.RData")
 load(file.path(pheno_dir, "PVV_BLUE.RData"))
 
 
@@ -129,80 +129,4 @@ pred_results_FHB <- cross_pred_out_FHB
 ## Save
 save_file <- file.path(result_dir, "prediction_results_FHB.RData")
 save("pred_results_FHB", file = save_file)
-
-
-
-
-
-
-
-
-
-
-
-# ### Predictions using different population sizes
-# # Cross data
-# 
-# 
-# ## List of TP sizes
-# tp_size_list <- seq(25, 150, by = 25)
-# n_samples <- 50
-# 
-# ## Generate TP samples
-# tp_samples <- map(tp_size_list, ~replicate(n = n_samples, sort(sample(tp_geno, size = .))))
-# 
-# ## Iterate over the population sizes
-# tp_size_predictions <- tp_samples %>%
-#   map(~{
-#     
-#     sample_mat <- .
-#     
-#     apply(X = sample_mat, MARGIN = 2, FUN = function(tp_geno_sample) {
-#     
-#       # Create data.frame for output
-#       G_in_sample <- G_in[c(tp_geno_sample, pot_pars_geno),]
-#       
-#       # Format the phenos
-#       # phenos_use <- tp_prediction_BLUE %>% 
-#       phenos_use <- tp_relevant_BLUE %>%
-#         spread(trait, value) %>%
-#         as.data.frame() %>%
-#         filter(line_name %in% tp_geno_sample)
-#       
-#       # Format the map
-#       map_use <- snp_info %>% 
-#         select(marker = `rs#`, chrom, cM_pos) %>%
-#         as.data.frame()
-#   
-#   
-#       ## Predict
-#       pred_out <- pop.predict(G.in = G_in_sample, y.in = phenos_use, map.in = map_use,
-#                               crossing.table = crossing_block, tail.p = 0.1, nInd = 150,
-#                               min.maf = 0, mkr.cutoff = 1, entry.cutoff = 1, remove.dups = FALSE,
-#                               nSim = 25, nCV.iter = 1, models = "rrBLUP", impute = "pass")
-#   
-#   
-#       # Convert to DF
-#       tidy.popvar(pred_out) %>%
-#         left_join(rownames_to_column(crossing_block, "family"), ., by = c("parent1" = "Par1", "parent2" = "Par2"))
-#       
-#     })
-#     
-#   })
-# 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

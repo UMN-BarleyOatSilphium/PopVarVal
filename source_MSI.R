@@ -19,10 +19,10 @@ invisible(lapply(packages, library, character.only = TRUE, lib.loc = package_dir
 
 
 ## Directories
-proj_dir <- "/panfs/roc/groups/6/smithkp/neyha001/Genomic_Selection/PopVarVal/"
+proj_dir <- "/path/to/project/on/supercomputer"
 
-geno_dir <-  "/panfs/roc/groups/6/smithkp/neyha001/Genomic_Selection/Data/Genos"
-pheno_dir <- "/panfs/roc/groups/6/smithkp/neyha001/Genomic_Selection/Data/Phenos"
+geno_dir <-  "/path/to/genotype/data/on/supercomputer"
+pheno_dir <- "/path/to/phenotypic/data/on/supercomputer"
 
 # Other directories
 fig_dir <- file.path(proj_dir, "Figures")

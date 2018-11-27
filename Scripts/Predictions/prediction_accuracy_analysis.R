@@ -72,13 +72,6 @@ pred_acc <- popvar_pred_obs %>%
   mutate(annotation = ifelse(!between(0, ci_lower, ci_upper), "*", "")) %>%
   ungroup()
 
-# ## Do predictions of the variance improve when using the unbiased expectation?
-# pred_acc_exp <- popvar_pred_obs %>%
-#   group_by(trait, parameter, tp_set) %>%
-#   do(bootstrap(x = .$prediction, y = .$expectation, fun = "cor", boot.reps = boot_reps, alpha = alpha)) %>%
-#   rowwise() %>%
-#   mutate(annotation = ifelse(!between(0, ci_lower, ci_upper), "*", "")) %>%
-#   ungroup()
 
 
 # trait       parameter   tp_set    statistic    base     se     bias ci_lower ci_upper n_fam annotation
@@ -129,19 +122,6 @@ g_pred_acc <- popvar_pred_obs %>%
         xlab("Prediction") + 
         facet_wrap(~ trait + parameter, ncol = 3, scales = "free") + 
         theme_acs() )
-
-# ## Plot for the expectation
-# g_pred_acc_exp <- popvar_pred_obs %>%
-#   split(.$tp_set) %>%
-#   map(~ggplot(., aes(x = prediction, y = expectation)) +
-#         geom_smooth(method = "lm", se = FALSE) + 
-#         geom_point() + 
-#         geom_text(data = mutate(subset(pred_acc_exp, tp_set == unique(.$tp_set)), annotation = str_c("r = ", round(base, 2), annotation)),
-#                   aes(x = Inf, y = -Inf, label = annotation), size = 3, hjust = 1.2, vjust = -1) + 
-#         ylab("Observation") +
-#         xlab("Prediction") + 
-#         facet_wrap(~ trait + parameter, ncol = 3, scales = "free") + 
-#         theme_acs() )
 
 
 # Save the plots
@@ -321,16 +301,6 @@ popvar_bias %>%
   geom_point() + 
   facet_wrap(~ trait + parameter, scales = "free")
 
-# ## Just plot bias for variance
-# g_variance_bias <- popvar_bias %>%
-#   filter(parameter == "variance", tp_set == "realistic") %>%
-#   ggplot(aes(x = family, y = bias)) + 
-#   geom_point(size = 0.5) + 
-#   facet_wrap(~ trait, scales = "free") +
-#   ylab("Bias") +
-#   xlab("Family") + 
-#   theme_acs() +
-#   theme(axis.text.x = element_blank())
   
 ## Just plot bias for variance
 g_variance_bias <- popvar_bias %>%
@@ -519,18 +489,6 @@ g_pred_acc <- popvar_pred_obs_FHB %>%
     facet_wrap(~ location + parameter, ncol = 3, scales = "free") + 
     theme_acs()
 
-# ## Plot for the expectation (unbiased)
-# g_pred_acc_exp <- popvar_pred_obs %>%
-#   split(.$tp_set) %>%
-#   map(~ggplot(., aes(x = prediction, y = expectation)) +
-#         geom_smooth(method = "lm", se = FALSE) + 
-#         geom_point() + 
-#         geom_text(data = mutate(subset(pred_acc_exp, tp_set == unique(.$tp_set)), annotation = str_c("r = ", round(base, 2), annotation)),
-#                   aes(x = Inf, y = -Inf, label = annotation), size = 3, hjust = 1.2, vjust = -1) + 
-#         ylab("Observation") +
-#         xlab("Prediction") + 
-#         facet_wrap(~ trait + parameter, ncol = 3, scales = "free") + 
-#         theme_acs() )
 
 
 # Save the plots
@@ -679,51 +637,3 @@ popvar_bias %>%
 
 
 
-
-
-
-# ### Analyze discriminatory power
-# # Subset the low/high variance families
-# popvar_pred_obs_discrim <- popvar_pred_obs %>% 
-#   filter(str_detect(note, "VarG")) %>%
-#   mutate(discrim_trait = ifelse(str_detect(note, "FHB"), "FHBSeverity", "PlantHeight"),
-#          discrim_group = str_extract(note, "low|high")) %>%
-#   filter(trait == discrim_trait, parameter != "mu_sp")
-# 
-# ## Significance test
-# popvar_pred_obs_discrim_sig <- popvar_pred_obs_discrim %>% 
-#   group_by(trait, parameter, tp_set) %>% 
-#   do(test = t.test(estimate ~ discrim_group, data = .)) %>%
-#   ungroup() %>%
-#   mutate(pvalue = map_dbl(test, "p.value"))
-# 
-# 
-# # Plot
-# g_pred_discrim <- popvar_pred_obs_discrim %>%
-#   ggplot(aes(x = discrim_group, y = estimate, color = family, shape = trait)) +
-#   geom_point(size = 3) +
-#   facet_wrap(~ trait + parameter + tp_set, ncol = 2, scales = "free") + 
-#   ylab("Observation") +
-#   xlab("Predicted variance group") +
-#   theme_acs()
-# 
-# ## Save
-# ggsave(filename = "predicted_variance_discrim.jpg", plot = g_pred_discrim, path = fig_dir, height = 5, width = 5, dpi = 1000)
-# 
-# 
-# g_pred_discrim_alt <- popvar_pred_obs_discrim %>% 
-#   select(-prediction) %>% 
-#   spread(parameter, estimate) %>%
-#   ggplot(aes(x = family_mean, y = variance, shape = discrim_group)) +
-#   geom_point(size = 3) +
-#   facet_wrap(~ trait, ncol = 2, scales = "free") + 
-#   scale_shape_discrete(name = "Predicted\nvariance\ngroup") +
-#   ylab("Family variance") +
-#   xlab("Family mean") +
-#   theme_acs()
-# 
-# ## Save
-# ggsave(filename = "predicted_variance_discrim_alt.jpg", plot = g_pred_discrim_alt, path = fig_dir, height = 3, width = 5, dpi = 1000)
-# 
-# 
-# 

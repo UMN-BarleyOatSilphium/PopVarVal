@@ -11,11 +11,8 @@ library(boot)
 ## Directories
 proj_dir <- repo_dir
 
-## Google drive directory
-gdrive_dir <- "C:/Users/jln54//GoogleDrive"
-
 # Geno, pheno, and enviro data
-geno_dir <-  file.path(gdrive_dir, "BarleyLab/Projects/Genomics/Genotypic_Data/GBS_Genotype_Data/")
+geno_dir <-  "path/to/genotype/data"
 
 # Other directories
 fig_dir <- file.path(proj_dir, "Figures")

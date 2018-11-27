@@ -21,33 +21,7 @@ library(ggridges)
 library(cowplot)
 
 
-## Load the S2 tidy BLUEs
-load(file.path(gdrive_dir, "BarleyLab/Breeding/PhenotypicData/Final/MasterPhenotypes/S2_tidy_BLUE.RData"))
-
-## Load the metadata from 2017 and 2018
-load(file.path(gdrive_dir, "BarleyLab/Breeding/PhenotypicData/Final/2017/2017_tidy_BLUEs.RData"))
-load(file.path(gdrive_dir, "BarleyLab/Breeding/PhenotypicData/Final/2018/2018_tidy_BLUEs.RData"))
-
-
-## Combine the metadata
-s2_stage_one_metadata <- bind_rows(tidy_metadata_2017, tidy_metadata_2018) %>%
-  filter(str_detect(trial, "PVV"), trait %in% traits)
-
-## Was HeadingDate significant when analyzing FHB severity?
-s2_stage_one_metadata %>% 
-  filter(trait == "FHBSeverity") %>% 
-  mutate(form = map(metadata, 2) %>% map(formula), 
-         HeadingDate_sig = map_lgl(form, ~any(str_detect(., "HeadingDate")))) %>%
-  select(trial, trait, HeadingDate_sig)
-
-# trial         trait       HeadingDate_sig
-# 1 PVV_CRM17_FHB FHBSeverity TRUE           
-# 2 PVV_STP17_FHB FHBSeverity FALSE          
-# 3 PVV_CRM18_FHB FHBSeverity FALSE          
-# 4 PVV_STP18_FHB FHBSeverity FALSE
-
-
-### Phenotypic analysis of training population data
+## This script assumes you have calculated genotype means in each trial as described in the manuscript.
 
 # First gather data that would have been used to make the predictions
 tp_prediction_tomodel <- s2_tidy_BLUE %>% 
@@ -131,82 +105,6 @@ tp_prediction_BLUE <- tp_analysis %>%
 
 
 
-# ## Do the same thing for the relevant tp data
-# 
-# ## Run models
-# tp_analysis <- tp_relevant_tomodel %>%
-#   group_by(trait) %>%
-#   do({
-#     df <- .
-#     print(unique(df$trait))
-#     summarize_pheno(data = df)
-#   })
-# 
-# 
-# ## Look at variance components and heritability
-# tp_analysis %>% select(trait, h2, n_e) %>% mutate(h2 = map_dbl(h2, "heritability"))
-# 
-# # trait          h2   n_e
-# # 1 FHBSeverity 0.446     4
-# # 2 HeadingDate 0.972    10
-# # 3 PlantHeight 0.746     9
-# 
-# (g_tp_relevant_h2 <- tp_analysis %>% 
-#     mutate(h2 = map_dbl(h2, "heritability")) %>% 
-#     qplot(x = trait, y = h2, geom = "col", fill = "blue", data = .) +
-#     geom_text(aes(label = str_c("Envs: ", n_e)), vjust = 2) +
-#     geom_text(aes(label = str_c("h2: ", round(h2, 3))), vjust = 4) + 
-#     scale_fill_discrete(guide = FALSE))
-# 
-# ggsave(filename = "tp_relevant_h2.jpg", plot = g_tp_relevant_h2, path = fig_dir, height = 5, width = 5, dpi = 1000)
-# 
-# tp_var_prop <- tp_analysis %>% 
-#   mutate(varcomp = map(h2, "var_comp")) %>%
-#   unnest(varcomp) %>% 
-#   group_by(trait) %>% 
-#   mutate(var_prop = variance / sum(variance)) 
-# 
-# # trait         n_e source                   variance    var_prop
-# # 1 FHBSeverity     4 line_name:environment 49.2        0.825      
-# # 2 FHBSeverity     4 line_name             10.4        0.175      
-# # 3 FHBSeverity     4 Residual               0.00456    0.0000764  
-# # 4 HeadingDate    10 line_name:environment  2.98       0.222      
-# # 5 HeadingDate    10 line_name             10.4        0.778      
-# # 6 HeadingDate    10 Residual               0.00000856 0.000000638
-# # 7 PlantHeight     9 line_name:environment 22.2        0.752      
-# # 8 PlantHeight     9 line_name              7.33       0.248      
-# # 9 PlantHeight     9 Residual               0.000507   0.0000172
-# 
-# 
-# g_tp_relevant_varprop <- tp_var_prop %>% 
-#   ggplot(aes(x = trait, y = var_prop, fill = source)) + 
-#   geom_col(position = "dodge")
-# 
-# ggsave(filename = "tp_relevant_varprop.jpg", plot = g_tp_relevant_varprop, path = fig_dir, height = 5, width = 5, dpi = 1000)
-# 
-# 
-# 
-# tp_analysis %>%
-#   unnest(sig_test)  %>%
-#   mutate(annotate = case_when(p_value <= 0.01 ~ "***", p_value <= 0.05 ~ "**", p_value <= 0.1 ~ "*", TRUE ~ ""))
-# 
-# ## G and GxE are significant for all traits, though more so for FHB severity.
-# 
-# # trait         n_e term     df statistic   p_value annotate
-# # 1 FHBSeverity     4 g         1      26.5 2.59e-  7 ***     
-# # 2 FHBSeverity     4 ge        1      75.8 3.13e- 18 ***     
-# # 3 HeadingDate    10 g         1    2066.  0.        ***     
-# # 4 HeadingDate    10 ge        1     553.  3.27e-122 ***     
-# # 5 PlantHeight     9 g         1     215.  1.30e- 48 ***     
-# # 6 PlantHeight     9 ge        1     538.  5.42e-119 *** 
-# 
-# 
-# 
-# # Unnest the blues
-# tp_relevant_BLUE <- tp_analysis %>%
-#   unnest(BLUE) %>%
-#   ungroup() %>%
-#   select(-n_e)
 
 
 
