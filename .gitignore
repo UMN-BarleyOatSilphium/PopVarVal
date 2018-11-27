@@ -11,3 +11,7 @@
 *.e*
 *.o*
 *JLN*
+/Data/PopVarVal_cross_info.xlsx
+/Data/PopVarVal_project_entries.xlsx
+/Data/experimental_parent_entries.csv
+/Data/project_entries_pedigree.xlsx
