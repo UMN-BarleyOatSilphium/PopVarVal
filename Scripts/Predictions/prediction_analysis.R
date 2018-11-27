@@ -195,12 +195,13 @@ ggsave(filename = "prediction_compare.jpg", plot = g_pred_compare, path = fig_di
 g_plot_list <- popvar_pred_toplot %>%
   map(~{
     df <- .
-    plot_list <- df %>%
+    df1 <- mutate(df, trait = str_replace_all(trait, trait_replace))
+    plot_list <- df1 %>%
       split(.$trait) %>%
       map(~{
-        ggplot(., aes(x = prediction)) +
+         ggplot(., aes(x = prediction)) +
           geom_histogram() + 
-          geom_point(data = subset(df, !is.na(family) & trait == unique(.$trait)), 
+          geom_point(data = subset(df1, !is.na(family) & trait == unique(.$trait)), 
                      aes(y = 10000, color = "selected"), size = 1) +
           # geom_segment()
           facet_grid(trait ~ parameter, scale = "free_x", switch = "y", labeller = labeller(parameter = label_parsed)) +
@@ -213,9 +214,9 @@ g_plot_list <- popvar_pred_toplot %>%
       })
         
       plot_grid(
-        plot_list$FHBSeverity,
-        plot_list$HeadingDate + theme(strip.text.x = element_blank()),
-        plot_list$PlantHeight + theme(strip.text.x = element_blank()),
+        plot_list$`FHB Severity`,
+        plot_list$`Heading Date` + theme(strip.text.x = element_blank()),
+        plot_list$`Plant Height` + theme(strip.text.x = element_blank()),
         nrow = 3, align = "v", rel_heights = c(1, 0.9, 0.9))
 
   })
@@ -233,12 +234,13 @@ for (i in seq_along(g_plot_list)) {
 ### Plot the mean versus the variance
 g_mean_var_list <- popvar_pred_toplot %>%
   map(~{
-    spread(., parameter, prediction) %>%
-      # group_by(trait) %>% sample_n(1000) %>%
+    mutate(., trait = str_replace_all(trait, trait_replace)) %>%
+      spread(., parameter, prediction) %>%
+      # group_by(trait) %>% sample_n(10000) %>%
       ggplot(aes(x = mu, y = `V[G]`)) +
-      geom_point(size = 1) +
-      ylab(expression(V[G])) +
-      xlab(expression(mu)) +
+      geom_point(size = 0.75) +
+      ylab(expression('Genetic variance ('~italic(V[G])~')')) +
+      xlab(expression('Mean ('~italic(mu)~')')) +
       facet_wrap(~ trait, ncol = 3, scales = "free") + 
       theme_acs()
   })
@@ -246,7 +248,7 @@ g_mean_var_list <- popvar_pred_toplot %>%
 # Save the plots
 for (i in seq_along(g_mean_var_list)) {
   filename <- str_c(names(g_plot_list)[i], "_prediction_mean_variance.jpg")
-  ggsave(filename = filename, plot = g_mean_var_list[[i]], path = fig_dir, height = 3, width = 8, dpi = 1000)
+  ggsave(filename = filename, plot = g_mean_var_list[[i]], path = fig_dir, height = 2.5, width = 7, dpi = 1000)
 }
 
 
@@ -262,18 +264,19 @@ label <- str_c(noted_parent, "/*")
 
 g_mean_var_noted_list <- popvar_pred_toplot %>% 
   map(~{
-    df <- spread(., parameter, prediction)
+    df1 <- mutate(., trait = str_replace_all(trait, trait_replace)) %>%
+      spread(., parameter, prediction)
     
-    df %>%
+    df1 %>%
       # group_by(trait) %>% sample_n(1000) %>%
       ggplot(aes(x = mu, y = `V[G]`)) +
       geom_point(size = 1) +
-      geom_point(data = subset(df, parent1 == noted_parent | parent2 == noted_parent),
-                 aes(color = "selected"), size = 1) +
+      geom_point(data = subset(df1, parent1 == noted_parent | parent2 == noted_parent),
+                 aes(color = "selected"), size = 0.75) +
       facet_wrap(~ trait, ncol = 3, scales = "free") + 
       scale_color_manual(name = NULL, values = c("selected" = umn_palette(n = 4)[4]), labels = label) +
-      ylab(expression(V[G])) +
-      xlab(expression(mu)) +
+      ylab(expression('Genetic variance ('*italic(V[G])*')')) +
+      xlab(expression('Mean ('*italic(mu)*')')) +
       theme_acs() +
       theme(legend.position = c(0.07, 0.95), legend.margin = margin(), legend.key.width = unit(0, "lines"),
             legend.background = element_rect(fill = alpha("white", 0)))
@@ -282,7 +285,7 @@ g_mean_var_noted_list <- popvar_pred_toplot %>%
 # Save the plots
 for (i in seq_along(g_mean_var_noted_list)) {
   filename <- str_c(names(g_mean_var_noted_list)[i], "_prediction_mean_variance_noted.jpg")
-  ggsave(filename = filename, plot = g_mean_var_noted_list[[i]], path = fig_dir, height = 3, width = 8, dpi = 1000)
+  ggsave(filename = filename, plot = g_mean_var_noted_list[[i]], path = fig_dir, height = 2.5, width = 7, dpi = 1000)
 }
 
 
@@ -359,94 +362,76 @@ models <- popvar_pred %>%
 # 9 PlantHeight both        <S3: lm> 0.999 
 
 
-## Select the best families based on mean, then fit the same models
-# models_select <- popvar_pred %>%
-#   group_by(trait) %>%
-#   top_n(n = -10000, wt = pred_mu) %>%
-#   do(data_frame(family_mean = list(lm(musp_low ~ pred_mu, data = .)),
-#                 variance = list(lm(musp_low ~ pred_varG, data = .)),
-#                 both = list(lm(musp_low ~ pred_mu + pred_varG, data = .)))) %>%
-#   ungroup() %>%
-#   gather(model, fit, -trait) %>%
-#   mutate(R2 = map_dbl(fit, ~summary(.)$r.squared))
+## Fit models for the selected crosses
+models <- popvar_pred %>%
+  map(~filter(., !is.na(family)) %>%
+        group_by(., trait) %>%
+        do(data_frame(family_mean = list(lm(musp_low ~ pred_mu, data = .)),
+                      variance = list(lm(musp_low ~ pred_varG, data = .)),
+                      both = list(lm(musp_low ~ pred_mu + pred_varG, data = .)))) %>%
+        ungroup() %>%
+        gather(model, fit, -trait) %>%
+        mutate(R2 = map_dbl(fit, ~summary(.)$r.squared)) )
+
+
+# $`realistic`
+# trait       model       fit          R2
+# 1 FHBSeverity family_mean <S3: lm> 0.967 
+# 2 HeadingDate family_mean <S3: lm> 0.957 
+# 3 PlantHeight family_mean <S3: lm> 0.976 
+# 4 FHBSeverity variance    <S3: lm> 0.122 
+# 5 HeadingDate variance    <S3: lm> 0.0167
+# 6 PlantHeight variance    <S3: lm> 0.0242
+# 7 FHBSeverity both        <S3: lm> 0.998 
+# 8 HeadingDate both        <S3: lm> 0.998 
+# 9 PlantHeight both        <S3: lm> 0.999 
+# 
+# $relevant
+# trait       model       fit          R2
+# 1 FHBSeverity family_mean <S3: lm> 0.966 
+# 2 HeadingDate family_mean <S3: lm> 0.957 
+# 3 PlantHeight family_mean <S3: lm> 0.979 
+# 4 FHBSeverity variance    <S3: lm> 0.128 
+# 5 HeadingDate variance    <S3: lm> 0.0301
+# 6 PlantHeight variance    <S3: lm> 0.0162
+# 7 FHBSeverity both        <S3: lm> 0.998 
+# 8 HeadingDate both        <S3: lm> 0.998 
+# 9 PlantHeight both        <S3: lm> 0.999 
+
 
 
 ## What is the ratio of the variance of means to the variance of variances?
 param_var <- popvar_pred %>%
   map(~group_by(., trait) %>% 
         summarize_at(vars(pred_mu, pred_varG, musp_low), var) %>%
-        mutate(ratio = pred_mu / pred_varG) )
+        mutate(ratio = pred_varG / pred_mu) )
 
 # $`realistic`
-# trait       pred_mu pred_varG musp_low ratio
-# 1 FHBSeverity    1.15    0.0415     1.22  27.7
-# 2 HeadingDate    1.33    0.0384     1.44  34.5
-# 3 PlantHeight    1.02    0.0123     1.08  83.0
+# trait       pred_mu pred_varG musp_low  ratio
+# 1 FHBSeverity    1.15    0.0415     1.22 0.0361
+# 2 HeadingDate    1.33    0.0384     1.44 0.0290
+# 3 PlantHeight    1.02    0.0123     1.08 0.0120
 # 
 # $relevant
-# trait       pred_mu pred_varG musp_low ratio
-# 1 FHBSeverity    1.15    0.0418     1.21  27.5
-# 2 HeadingDate    1.49    0.0457     1.66  32.7
-# 3 PlantHeight    1.12    0.0212     1.20  53.0
+# trait       pred_mu pred_varG musp_low  ratio
+# 1 FHBSeverity    1.15    0.0418     1.21 0.0364
+# 2 HeadingDate    1.49    0.0457     1.66 0.0306
+# 3 PlantHeight    1.12    0.0212     1.20 0.0189
 
 
-## What is the correlation between the kinship coefficient and the predicted genetic variance?
-K <- A.mat(X = s2_imputed_mat_use, min.MAF = 0, max.missing = 1)
-
-pot_par_kinship <- popvar_pred_toplot$realistic %>% 
-  select(parent1, parent2) %>% 
-  pmap_dbl(~K[.x, .y])
-
-
-## Correlation
-popvar_pred_toplot$realistic %>% 
-  mutate(G = pot_par_kinship) %>% 
-  group_by(trait, parameter) %>% 
-  summarize(cor_pred_G = cor(prediction, G))
-
-# trait       parameter cor_pred_G
-# 1 FHBSeverity mu           -0.0430
-# 2 FHBSeverity V[G]         -0.403 
-# 3 FHBSeverity mu[sp]        0.0657
-# 4 HeadingDate mu            0.0427
-# 5 HeadingDate V[G]         -0.464 
-# 6 HeadingDate mu[sp]        0.145 
-# 7 PlantHeight mu            0.0151
-# 8 PlantHeight V[G]         -0.436 
-# 9 PlantHeight mu[sp]        0.100 
-
-# There appears to be a pattern for variance. Plot
-g_pred_G <- popvar_pred_toplot$realistic %>% 
-  mutate(G = pot_par_kinship) %>%
-  filter(parameter == "V[G]") %>%
-  ggplot(aes(x = G, y = prediction)) +
-  geom_point() + 
-  facet_wrap(~ trait, scales = "free", ncol = 2) +
-  theme_acs()
-
-## Save
-ggsave(filename = "kinship_pred_varG.jpg", plot = g_pred_G, path = fig_dir, width = 6, height = 6, dpi = 1000)
-
-## Pull out a notable line
-popvar_pred_toplot2 <- popvar_pred_toplot$realistic %>% 
-  mutate(G = pot_par_kinship) %>%
-  filter(parameter == "V[G]") 
-
-g_pred_G_noted <- popvar_pred_toplot2 %>%  
-  ggplot(aes(x = G, y = prediction)) +
-  geom_point() + 
-  geom_point(data = subset(popvar_pred_toplot2, parent1 == noted_parent | parent2 == noted_parent),
-             aes(color = "selected"), size = 1) +
-  facet_wrap(~ trait, ncol = 3, scales = "free") + 
-  scale_color_manual(name = NULL, values = c("selected" = umn_palette(n = 4)[4]), labels = label) +
-  theme_acs()
-
-## Save
-ggsave(filename = "kinship_pred_varG_noted.jpg", plot = g_pred_G_noted, path = fig_dir, width = 6, height = 3, dpi = 1000)
+## Calculate the same ratio for the selected crosses
+popvar_pred %>%
+  map(~filter(., !is.na(family)) %>%
+        group_by(., trait) %>% 
+        summarize_at(vars(pred_mu, pred_varG, musp_low), var) %>%
+        mutate(ratio = pred_varG / pred_mu) )
 
 
 
-  #### Look at the predictions of selected crosses
+
+
+
+#### Look at the predictions of selected crosses
 
 ## First characterize the parents of the families
 

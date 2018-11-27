@@ -67,18 +67,9 @@ summarize_pheno <- function(data, blue.model = c("lmer", "sommer")) {
     formula <- value ~ (1|line_name)
     exp <- "line_name / (line_name + (Residual / (n_e * n_r)))"
     
-    ## Drop terms
-    fit_noge <- lmer(formula = formula, data = data1, control = control, weights = wts)
-    fit_nog <- lm(formula = value ~ 1, data = data1)
-    
   } else {
     formula <- value ~ (1|line_name) + environment + (1|line_name:environment)
     exp <- "line_name / (line_name + (line_name:environment / n_e) + (Residual / (n_e * n_r)))"
-    
-    ## Drop terms
-    fit_noge <- lmer(formula = value ~ (1|line_name) + environment, data = data1, control = control, weights = wts)
-    fit_nog <- lmer(formula = value ~  environment + (1|line_name:environment), data = data1, control = control, weights = wts)
-    
     
   }
 
@@ -101,11 +92,9 @@ summarize_pheno <- function(data, blue.model = c("lmer", "sommer")) {
   
 
   # Calculate significance
-  ge_sig <- lr_test(fit, fit_noge)
-  g_sig <- lr_test(fit, fit_nog)
-  sig_test <- bind_rows(g_sig, ge_sig) %>% 
-    mutate(term = c("g", "ge")) %>% 
-    select(term, names(.), -full_model)
+  sig_test <- ranova(fit) %>% 
+    tidy() %>% 
+    select(term, statisitc = LRT, df, p_value = p.value)
   
   
   ## Split on whether to use lmer or sommer

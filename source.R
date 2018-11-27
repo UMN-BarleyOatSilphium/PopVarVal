@@ -29,6 +29,8 @@ all_colors <- colorRampPalette(umn_palette(2)[3:5])
 param_replace <- c("family_mean" = "mu", "variance" = "V[G]", "mu_sp" = "mu[sp]")
 
 
+
+
 ######
 # MSI Source starts here
 ######
@@ -43,6 +45,8 @@ load(file.path(geno_dir, "S2_genos_mat.RData"))
 
 # Relevant traits
 traits <- c("HeadingDate", "FHBSeverity", "PlantHeight")
+# Create a vector to replance trait names
+trait_replace <- setNames(c("Heading Date", "FHB Severity", "Plant Height"), traits)
 
 
 

@@ -3,7 +3,14 @@
 PopVarVal
 =========
 
-Description
------------
+Project repository for the empirical validation of PopVar within the University of Minnesota two-row barley breeding program. This repository is a companion to the manuscript *Validating Genomewide Predictions of Genetic Variance in a Contemporary Breeding Program*, currently submitted to *Crop Science* (you can read a preprint [here](urltocome)).
 
-Project repository for the empirical validation of PopVar. This experiment involved predicting the genetic variance (*V*<sub>*G*</sub>) and superior progeny mean (*μ*<sub>*s**p*</sub>) of a large number of simulated bi-parental crosses. Those simulated crosses with high and low predicted *V*<sub>*G*</sub> were selected and were actually created. The families will be evaluated in field trials in 2017 and 2018.
+Data
+----
+
+Data used in this study are available from the [Triticeae Toolbox](https://triticeaetoolbox.org/barley). See the README in the "Data" subfolder for instructions on accessing this data.
+
+Scripts
+-------
+
+Scripts used to complete the analysis and generate figures are available in the "Scripts" subfolder.

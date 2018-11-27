@@ -21,10 +21,30 @@ library(ggridges)
 library(cowplot)
 
 
-## Load the S2 BLUEs
+## Load the S2 tidy BLUEs
 load(file.path(gdrive_dir, "BarleyLab/Breeding/PhenotypicData/Final/MasterPhenotypes/S2_tidy_BLUE.RData"))
 
+## Load the metadata from 2017 and 2018
+load(file.path(gdrive_dir, "BarleyLab/Breeding/PhenotypicData/Final/2017/2017_tidy_BLUEs.RData"))
+load(file.path(gdrive_dir, "BarleyLab/Breeding/PhenotypicData/Final/2018/2018_tidy_BLUEs.RData"))
 
+
+## Combine the metadata
+s2_stage_one_metadata <- bind_rows(tidy_metadata_2017, tidy_metadata_2018) %>%
+  filter(str_detect(trial, "PVV"), trait %in% traits)
+
+## Was HeadingDate significant when analyzing FHB severity?
+s2_stage_one_metadata %>% 
+  filter(trait == "FHBSeverity") %>% 
+  mutate(form = map(metadata, 2) %>% map(formula), 
+         HeadingDate_sig = map_lgl(form, ~any(str_detect(., "HeadingDate")))) %>%
+  select(trial, trait, HeadingDate_sig)
+
+# trial         trait       HeadingDate_sig
+# 1 PVV_CRM17_FHB FHBSeverity TRUE           
+# 2 PVV_STP17_FHB FHBSeverity FALSE          
+# 3 PVV_CRM18_FHB FHBSeverity FALSE          
+# 4 PVV_STP18_FHB FHBSeverity FALSE
 
 
 ### Phenotypic analysis of training population data
@@ -356,6 +376,13 @@ tp_prediction_BLUE_FHB %>%
 
 
 
+
+
+
+
+
+
+
 ### Phenotypic analysis of validation family data
 # Gather data
 
@@ -519,11 +546,12 @@ vp_family_BLUE %>%
 
 # Combine
 vp_family_BLUE_toplot <- bind_rows(
-  mutate(vp_family_BLUE, type = "By family"), 
+  mutate(vp_family_BLUE, type = "By\nfamily"), 
   mutate(vp_family_BLUE, family = "All", type = "All"))
 
 # Plot per trait
 g_vp_family_density <- vp_family_BLUE_toplot %>%
+  mutate(trait = str_replace_all(trait, trait_replace)) %>%
   split(.$trait) %>%
   map(~{
     temp <- .
@@ -542,7 +570,7 @@ g_vp_family_density <- vp_family_BLUE_toplot %>%
     # Plot
     temp %>%
       ggplot(aes(x = value, y = type, fill = family)) +
-      geom_density_ridges(alpha = 0.2) +
+      geom_density_ridges(alpha = 0.2, size = 0.25) +
       facet_wrap(~ trait, ncol = 1, scale = "free") +
       scale_fill_manual(values = family_color, name = "Family", guide = FALSE) +
       theme_acs() +
@@ -553,7 +581,7 @@ g_vp_family_density <- vp_family_BLUE_toplot %>%
 # Cowplot
 g_density_plot <- plot_grid(plotlist = g_vp_family_density, ncol = 1, align = "hv")
 ggsave(filename = "vp_pheno_mean_density.jpg", plot = g_density_plot, path = fig_dir,
-       height = 7, width = 4, dpi = 1000)
+       height = 6, width = 3.5, dpi = 1000)
 
 
 

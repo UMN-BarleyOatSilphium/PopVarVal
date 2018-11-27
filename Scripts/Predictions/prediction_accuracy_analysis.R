@@ -153,6 +153,7 @@ for (i in seq_along(g_pred_acc)) {
 ## Edit the manuscript-ready plot
 g_pred_acc_use <- popvar_pred_obs %>%
   filter(tp_set == "realistic") %>%
+  mutate(trait = str_replace_all(trait, trait_replace)) %>%
   split(.$tp_set) %>%
   map(~{
     df <- .
@@ -168,16 +169,16 @@ g_pred_acc_use <- popvar_pred_obs %>%
       map(~{
         df2 <- .
         ggplot(df2, aes(x = prediction, y = estimate)) +
-          geom_smooth(method = "lm", se = FALSE) + 
-          geom_point(size = 1) + 
+          geom_smooth(method = "lm", se = FALSE, lwd = 0.5) + 
+          geom_point(size = 0.5) + 
           geom_text(data = distinct(df2, trait, parameter, annotation), aes(x = Inf, y = -Inf, label = annotation), 
-                    parse = TRUE, size = 3, hjust = 1.1, vjust = -0.5) + 
+                    parse = TRUE, size = 2, hjust = 1.1, vjust = -0.5) + 
           ylab("Observation") +
           xlab("Prediction") + 
           facet_grid(trait ~ parameter, scales = "free", labeller = labeller(parameter = label_parsed), switch = "y") + 
           scale_y_continuous(breaks = scales::pretty_breaks(), labels = function(x) str_pad(x, width = 2, pad = "0")) + 
-          theme_acs() +
-          theme(strip.placement = "outside", axis.title = element_blank())
+          theme_acs(base_size = 6) +
+          theme(strip.placement = "outside", axis.title = element_blank(), strip.text = element_text(size = 7))
         
       })
     
@@ -217,7 +218,7 @@ g_pred_acc_use <- popvar_pred_obs %>%
 
 # Save
 ggsave(filename = "realistic_comb_pred_acc_use.jpg", plot = grid.arrange(g_pred_acc_use$realistic), path = fig_dir,
-       height = 4.5, width = 5, dpi = 1000)
+       height = 3.5, width = 3.5, dpi = 1000)
 
 
 
@@ -262,6 +263,40 @@ pred_acc %>%
 
 
 
+## Remove families with very low estimates of variance, then re-calculate accuracy
+
+set.seed(242)
+pred_acc_filt1 <- popvar_pred_obs %>% 
+  filter(estimate > 0.001) %>%
+  group_by(trait, parameter, tp_set) %>% 
+  do(cbind(bootstrap(x = .$prediction, y = .$estimate, fun = "cor", boot.reps = boot_reps, alpha = alpha), n_fam = length(.$prediction))) %>%
+  rowwise() %>%
+  mutate(annotation = ifelse(!between(0, ci_lower, ci_upper), "*", "")) %>%
+  ungroup()
+
+## Filter for just variance - these are the only accuracies that would have changed
+## Compare the unfiltered and filtered
+pred_acc_compare <- full_join(filter(pred_acc, parameter == "variance", tp_set == "realistic"), filter(pred_acc_filt1, parameter == "variance", tp_set == "realistic"),
+                              by = c("trait", "parameter", "tp_set", "statistic")) %>%
+  rename_at(vars(contains(".x")), ~str_replace(string = ., pattern = ".x", replacement = "_unfilt")) %>%
+  rename_at(vars(contains(".y")), ~str_replace(string = ., pattern = ".y", replacement = "_filt")) %>%
+  select(trait:tp_set, matches("base|ci"))
+
+
+# trait       parameter tp_set    base_unfilt ci_lower_unfilt ci_upper_unfilt base_filt ci_lower_filt ci_upper_filt
+# 1 FHBSeverity variance  realistic     0.00693         -0.357            0.556   -0.0575       -0.727          0.731
+# 2 HeadingDate variance  realistic     0.391            0.0334           0.767    0.391         0.0242         0.780
+# 3 PlantHeight variance  realistic     0.482            0.181            0.702    0.385        -0.0316         0.676
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -286,16 +321,28 @@ popvar_bias %>%
   geom_point() + 
   facet_wrap(~ trait + parameter, scales = "free")
 
+# ## Just plot bias for variance
+# g_variance_bias <- popvar_bias %>%
+#   filter(parameter == "variance", tp_set == "realistic") %>%
+#   ggplot(aes(x = family, y = bias)) + 
+#   geom_point(size = 0.5) + 
+#   facet_wrap(~ trait, scales = "free") +
+#   ylab("Bias") +
+#   xlab("Family") + 
+#   theme_acs() +
+#   theme(axis.text.x = element_blank())
+  
 ## Just plot bias for variance
 g_variance_bias <- popvar_bias %>%
+  mutate(trait = str_replace_all(trait, trait_replace)) %>%
   filter(parameter == "variance", tp_set == "realistic") %>%
-  ggplot(aes(x = family, y = bias)) + 
-  geom_point(size = 0.5) + 
+  ggplot(aes(x = bias)) + 
+  geom_histogram() +
+  # geom_density() +
   facet_wrap(~ trait, scales = "free") +
-  ylab("Bias") +
-  xlab("Family") + 
-  theme_acs() +
-  theme(axis.text.x = element_blank())
+  ylab("Number of families") +
+  xlab("Bias") + 
+  theme_acs()
 
 ggsave(filename = "predicted_variance_bias.jpg", plot = g_variance_bias, path = fig_dir, height = 1.5, width = 3.5, dpi = 1000)
 
@@ -498,7 +545,8 @@ g_pred_acc_use <- list(popvar_pred_obs_FHB) %>%
     df <- .
     df1 <- df %>% 
       left_join(., pred_acc, by = c("trait", "parameter", "location")) %>%
-      mutate(parameter = str_replace_all(parameter, param_replace),
+      mutate(trait = str_replace_all(trait, trait_replace),
+             parameter = str_replace_all(parameter, param_replace),
              parameter = factor(parameter, levels = param_replace),
              annotation = str_c("r[MP]==", round(base, 2), "^'", annotation, "'"),
              facet_y = str_c(trait, ": ", location))
