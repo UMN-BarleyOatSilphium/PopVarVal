@@ -3,7 +3,7 @@
 PopVarVal
 =========
 
-Project repository for the empirical validation of PopVar within the University of Minnesota two-row barley breeding program. This repository is a companion to the manuscript *Validating Genomewide Predictions of Genetic Variance in a Contemporary Breeding Program*, currently submitted to *Crop Science* (you can read a preprint [here](urltocome)).
+Project repository for the empirical validation of PopVar within the University of Minnesota two-row barley breeding program. This repository is a companion to the manuscript *Validating Genomewide Predictions of Genetic Variance in a Contemporary Breeding Program*, currently submitted to *Crop Science*.
 
 Data
 ----
