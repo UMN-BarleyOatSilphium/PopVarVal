@@ -23,7 +23,7 @@ this study. These instructions work as of 27 November, 2018.
 #### Genomewide marker data
 
 The genomewide marker data used in this study are available from T3 and
-(in a more readily usable form) from the Digital Repository for the
+(in a more readily usable form) from the Data Repository for the
 University of Minnesota using the following persistent link:
 <http://hdl.handle.net/11299/204785>.
 
