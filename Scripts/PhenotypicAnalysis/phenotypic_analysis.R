@@ -29,10 +29,11 @@ tp_prediction_tomodel <- s2_tidy_BLUE %>%
          location %in% c("STP", "CRM")) %>%
   arrange(year, location, trial, trait, line_name)
 
-# Now gather data on the training population that would be relevant to the predictions, regardless of year
-tp_relevant_tomodel <- s2_tidy_BLUE %>%
-  filter(trait %in% traits, line_name %in% tp, year %in% 2014:2017, 
-         location %in% c("STP", "CRM", "FND", "BCW"))
+## Include the above data along with cycle 1 data (including parents)
+parent_prediction_tomodel <- s2_tidy_BLUE %>% 
+  filter(trait %in% traits, line_name %in% c(pot_pars), year %in% 2014:2015,
+         location %in% c("STP", "CRM")) %>%
+  arrange(year, location, trial, trait, line_name)
 
 
 ## Run models
@@ -100,6 +101,28 @@ tp_analysis %>%
 # Unnest the blues
 tp_prediction_BLUE <- tp_analysis %>%
   unnest(BLUE) %>%
+  ungroup() %>%
+  select(-n_e)
+
+
+
+
+## Do the same thing for the parent data
+
+## Run models
+parent_analysis <- parent_prediction_tomodel %>%
+  group_by(trait) %>%
+  do({
+    df <- .
+    print(unique(df$trait))
+    summarize_pheno(data = df)
+  })
+
+
+
+# Unnest the blues
+parent_BLUE <- parent_analysis %>% 
+  unnest(BLUE) %>% 
   ungroup() %>%
   select(-n_e)
 
@@ -401,8 +424,9 @@ vp_FHB_BLUE <- vp_analysis_FHB %>%
   select(-n_e)
 
 
+
 ## Save the BLUEs
-save("tp_prediction_BLUE", "tp_relevant_BLUE", "tp_prediction_BLUE_FHB", "vp_BLUE", "vp_FHB_BLUE", 
+save("tp_prediction_BLUE", "tp_parent_BLUE", "tp_prediction_BLUE_FHB", "vp_BLUE", "vp_FHB_BLUE", 
      file = file.path(data_dir, "PVV_BLUE.RData"))
 
 # Load

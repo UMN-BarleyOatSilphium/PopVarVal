@@ -68,7 +68,7 @@ summarize_pheno <- function(data, blue.model = c("lmer", "sommer")) {
     exp <- "line_name / (line_name + (Residual / (n_e * n_r)))"
     
   } else {
-    formula <- value ~ (1|line_name) + environment + (1|line_name:environment)
+    formula <- value ~ environment + (1|line_name) + (1|line_name:environment)
     exp <- "line_name / (line_name + (line_name:environment / n_e) + (Residual / (n_e * n_r)))"
     
   }
@@ -108,6 +108,7 @@ summarize_pheno <- function(data, blue.model = c("lmer", "sommer")) {
     if (any(str_detect(new_form, "\\("))) {
       ## Now refit the model, but change genotype from random to fixed
       fit_blue <- lmer(formula = new_form, data = data1, control = control, weights = wts)
+      fit_blue <- structure(fit_blue, class = "merMod")
       
     } else {
       ## Now refit the model, but change genotype from random to fixed
